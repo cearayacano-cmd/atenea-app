@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0F004F;
+  --color-primary-soft: #1B0088;
+  --color-accent: #B20F3B;
+  --color-accent-hover: #ED1650;
+  --color-bg-main: #F8F9FC;
+  --color-card: #FFFFFF;
+  --color-border-soft: #B8B8B8;
+  --color-text-strong: #0F004F;
+  --color-text-muted: #4D4D4D;
+}
+
+:root {
+  --color-primary: #0F004F;
+  --color-primary-soft: #1B0088;
+  --color-accent: #B20F3B;
+  --color-accent-hover: #ED1650;
+  --color-bg-main: #F8F9FC;
+  --color-card: #FFFFFF;
+  --color-border-soft: #B8B8B8;
+  --color-text-strong: #0F004F;
+  --color-text-muted: #4D4D4D;
+}
+
+body {
+  background-color: var(--color-bg-main);
+  color: var(--color-text-strong);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+.latam-card {
+  background-color: var(--color-card);
+  border-top: 3px solid var(--color-primary);
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  padding: 1.5rem;
+  transition: all 0.3s ease-in-out;
+}
+
+.latam-card:hover {
+  transform: translateY(-0.25rem);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.latam-btn-primary {
+  background-color: var(--color-accent);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  transition: all 0.3s ease-in-out;
+  box-shadow: 0 4px 6px -1px rgba(178, 15, 59, 0.2);
+}
+
+.latam-btn-primary:hover {
+  background-color: var(--color-accent-hover);
+  box-shadow: 0 10px 15px -3px rgba(178, 15, 59, 0.3);
+  transform: scale(1.05);
+}
+
+/* Strategic Bars */
+.bar-strategic {
+  background: linear-gradient(90deg, #7DA81A 0%, #99CC33 100%);
+}
+
+.bar-operational {
+  background: linear-gradient(90deg, #B20F3B 0%, #ED1650 100%);
+}
+
+.bar-weekly {
+  background: linear-gradient(90deg, #0F004F 0%, #4257E8 100%);
+}
+
+.bar-warning {
+  background: linear-gradient(90deg, #FFC700 0%, #FFE017 100%);
+}
+
+.bar-glow {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.bar-glow::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.15), transparent);
+  pointer-events: none;
+}
+
+.bar-glow:hover {
+  filter: brightness(1.15);
+  box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.2);
+}
