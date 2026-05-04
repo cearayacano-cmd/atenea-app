@@ -1,8 +1,9 @@
 # Build stage
 FROM node:20 AS builder
 WORKDIR /app
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 COPY package*.json ./
-RUN npm install
+RUN npm config set strict-ssl false && npm install
 COPY . .
 RUN npm run build
 
@@ -14,8 +15,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm config set strict-ssl false && npm install --omit=dev
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server.ts ./

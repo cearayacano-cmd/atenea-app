@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, Calendar, Clock, Link as LinkIcon, Paperclip, AlertTriangle, CheckCircle2, Circle, ChevronDown, ChevronUp, Sparkles, Loader2 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import ReactMarkdown from 'react-markdown';
 
 interface Task {
@@ -67,7 +66,6 @@ export default function HistoryView() {
     const taskKey = `${task.actividad}-${task.area}`;
     setGeneratingReport(taskKey);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const prompt = `
         Eres un asistente experto en gestión de proyectos. A continuación se presentan los hallazgos acumulados y las evidencias de una actividad específica.
         
@@ -88,13 +86,16 @@ export default function HistoryView() {
         El informe debe ser profesional, conciso y estar en español. Utiliza formato Markdown.
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
+      const res = await fetch('/api/ai/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
       });
 
-      if (response.text) {
-        setReports(prev => ({ ...prev, [taskKey]: response.text }));
+      const data = await res.json();
+
+      if (data.text) {
+        setReports(prev => ({ ...prev, [taskKey]: data.text }));
       }
     } catch (error) {
       console.error('Error generating report:', error);
@@ -117,7 +118,7 @@ export default function HistoryView() {
   };
 
   const toggleExpand = (id: string) => {
-    setExpandedTasks(prev => 
+    setExpandedTasks(prev =>
       prev.includes(id) ? prev.filter(tId => tId !== id) : [...prev, id]
     );
   };
@@ -136,11 +137,11 @@ export default function HistoryView() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h2 className="text-2xl font-black text-primary tracking-tight uppercase">Historial Acumulado</h2>
-        
+
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-            <input 
+            <input
               type="text"
               placeholder="Buscar actividad o hallazgo..."
               value={searchTerm}
@@ -148,10 +149,10 @@ export default function HistoryView() {
               className="pl-10 pr-4 py-2 rounded-xl border border-border-soft outline-none focus:ring-2 focus:ring-primary w-full md:w-64 text-sm"
             />
           </div>
-          
+
           <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-border-soft">
             <Filter size={16} className="ml-2 text-text-muted" />
-            <select 
+            <select
               value={filterArea}
               onChange={(e) => setFilterArea(e.target.value)}
               className="bg-transparent outline-none text-sm font-bold text-text-strong pr-2 py-1"
@@ -165,7 +166,7 @@ export default function HistoryView() {
 
           <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-border-soft">
             <Filter size={16} className="ml-2 text-text-muted" />
-            <select 
+            <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               className="bg-transparent outline-none text-sm font-bold text-text-strong pr-2 py-1"
@@ -190,10 +191,10 @@ export default function HistoryView() {
             const taskKey = `${task.actividad}-${task.area}`;
             const isExpanded = expandedTasks.includes(taskKey);
             const priority = getPriorityInfo(task.prioridad);
-            
+
             return (
               <div key={taskKey} className={`latam-card transition-all overflow-hidden ${isExpanded ? 'ring-2 ring-primary/20' : ''}`}>
-                <div 
+                <div
                   className="p-4 flex items-center justify-between cursor-pointer hover:bg-bg-main/50 transition-colors"
                   onClick={() => toggleExpand(taskKey)}
                 >
@@ -201,7 +202,7 @@ export default function HistoryView() {
                     <div className={`${task.completada ? 'text-[#7DA81A]' : 'text-text-muted'}`}>
                       {task.completada ? <CheckCircle2 size={24} /> : <Circle size={24} />}
                     </div>
-                    
+
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-1">
                         <span className="text-[10px] font-bold text-text-muted flex items-center">
@@ -225,7 +226,7 @@ export default function HistoryView() {
                       </h4>
                     </div>
                   </div>
-                  
+
                   <div className="ml-4 text-text-muted">
                     {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                   </div>
@@ -319,7 +320,7 @@ export default function HistoryView() {
                                     <span className="text-xs text-text-strong block truncate">{e.text}</span>
                                   </div>
                                   {(e.text.startsWith('http') || e.text.startsWith('www')) && (
-                                    <a 
+                                    <a
                                       href={e.text.startsWith('http') ? e.text : `https://${e.text}`}
                                       target="_blank"
                                       rel="noopener noreferrer"

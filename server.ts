@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import Database from "better-sqlite3";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -150,7 +151,7 @@ async function startServer() {
   });
 
   // API Endpoints as requested
-  
+
   // 1. Configuracion
   app.get("/configuracion", (req, res) => {
     const config = db.prepare("SELECT * FROM Configuracion WHERE id = 1").get();
@@ -168,9 +169,9 @@ async function startServer() {
   app.get("/tareas", (req, res) => {
     const { fecha } = req.query;
     if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
-    
+
     const tasks = db.prepare("SELECT * FROM Tareas WHERE fecha = ?").all(fecha);
-    
+
     // Also fetch/calculate the daily plan for this date to support the frontend logic
     let plan = db.prepare("SELECT * FROM PlanesDiarios WHERE date = ?").get(fecha);
     if (!plan) {
@@ -185,7 +186,7 @@ async function startServer() {
         hora_inicio_ejecucion: null
       };
     }
-    
+
     res.json({ tasks, plan });
   });
 
@@ -199,16 +200,16 @@ async function startServer() {
   app.put("/tareas/:id", (req, res) => {
     const { id } = req.params;
     const { actividad, prioridad, completada, estado_ejecucion, hallazgos, justificacion, evidencia, hora_inicio_plan, hora_fin_plan, tiempo_asignado_minutos, area } = req.body;
-    
+
     console.log(`Updating task ${id}:`, req.body);
-    
+
     const updates = [];
     const params = [];
-    
+
     if (actividad !== undefined) { updates.push("actividad = ?"); params.push(actividad); }
     if (prioridad !== undefined) { updates.push("prioridad = ?"); params.push(prioridad); }
     if (area !== undefined) { updates.push("area = ?"); params.push(area); }
-    
+
     // Rule: Si estado_ejecucion = "terminada" → completada = 1
     // En cualquier otro caso → completada = 0
     let finalCompletada = completada;
@@ -217,16 +218,16 @@ async function startServer() {
       params.push(estado_ejecucion);
       finalCompletada = (estado_ejecucion === 'terminada' ? 1 : 0);
     }
-    
-    if (finalCompletada !== undefined) { 
-      updates.push("completada = ?"); 
-      params.push(finalCompletada ? 1 : 0); 
+
+    if (finalCompletada !== undefined) {
+      updates.push("completada = ?");
+      params.push(finalCompletada ? 1 : 0);
     }
 
     if (hallazgos !== undefined) { updates.push("hallazgos = ?"); params.push(hallazgos); }
-    if (justificacion !== undefined || req.body.justification !== undefined) { 
-      updates.push("justificacion = ?"); 
-      params.push(justificacion || req.body.justification); 
+    if (justificacion !== undefined || req.body.justification !== undefined) {
+      updates.push("justificacion = ?");
+      params.push(justificacion || req.body.justification);
     }
     if (evidencia !== undefined) { updates.push("evidencia = ?"); params.push(evidencia); }
     if (hora_inicio_plan !== undefined) { updates.push("hora_inicio_plan = ?"); params.push(hora_inicio_plan); }
@@ -234,7 +235,7 @@ async function startServer() {
     if (tiempo_asignado_minutos !== undefined) { updates.push("tiempo_asignado_minutos = ?"); params.push(tiempo_asignado_minutos); }
     if (req.body.minutos_remanentes !== undefined) { updates.push("minutos_remanentes = ?"); params.push(req.body.minutos_remanentes); }
     if (req.body.fecha_origen_remanente !== undefined) { updates.push("fecha_origen_remanente = ?"); params.push(req.body.fecha_origen_remanente); }
-    
+
     if (updates.length > 0) {
       params.push(id);
       db.prepare(`UPDATE Tareas SET ${updates.join(", ")} WHERE id = ?`).run(...params);
@@ -256,7 +257,7 @@ async function startServer() {
         }
       }
     }
-    
+
     res.json({ success: true });
   });
 
@@ -269,10 +270,10 @@ async function startServer() {
   // Internal endpoint for daily plan adjustments (to support the "inheritance" requirement)
   app.post("/plan-diario", (req, res) => {
     const { date, hora_inicio, hora_fin, horas_efectivas, estado_cierre } = req.body;
-    
+
     // Get existing plan to preserve values if not provided
     const existing = db.prepare("SELECT * FROM PlanesDiarios WHERE date = ?").get(date);
-    
+
     const h_inicio = hora_inicio !== undefined ? hora_inicio : (existing?.hora_inicio || '08:00');
     const h_fin = hora_fin !== undefined ? hora_fin : (existing?.hora_fin || '17:00');
     const h_efectivas = horas_efectivas !== undefined ? horas_efectivas : (existing?.horas_efectivas || 6.0);
@@ -397,7 +398,7 @@ async function startServer() {
   app.post("/reabrir-planificacion", (req, res) => {
     const { fecha } = req.body;
     if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
-    
+
     db.prepare(`
       UPDATE Tareas 
       SET hora_inicio_plan = NULL, 
@@ -417,10 +418,10 @@ async function startServer() {
   app.get("/history/accumulated", (req, res) => {
     const tasks = db.prepare("SELECT * FROM Tareas ORDER BY fecha DESC").all();
     const backlog = db.prepare("SELECT * FROM Backlog").all();
-    
+
     // Group by activity name + area
     const grouped: Record<string, any> = {};
-    
+
     tasks.forEach((task: any) => {
       const key = `${task.actividad}|${task.area || ''}`;
       if (!grouped[key]) {
@@ -437,7 +438,7 @@ async function startServer() {
           completada: task.estado_ejecucion === 'terminada'
         };
       }
-      
+
       if (task.hallazgos && task.hallazgos.trim()) grouped[key].hallazgos.push({ fecha: task.fecha, text: task.hallazgos });
       if (task.justificacion && task.justificacion.trim()) grouped[key].justificaciones.push({ fecha: task.fecha, text: task.justificacion });
       if (task.evidencia) {
@@ -478,6 +479,52 @@ async function startServer() {
       db.prepare("UPDATE Configuracion SET hora_inicio = '08:00', hora_fin = '17:00', horas_efectivas = 6.0 WHERE id = 1").run();
     })();
     res.json({ success: true, message: "Base de datos reiniciada correctamente" });
+  });
+
+  // 7. AI Proxy Endpoints
+  const genAI = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY
+  });
+
+  app.post("/api/ai/generate-report", async (req, res) => {
+    try {
+      const { prompt } = req.body;
+      const response = await genAI.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
+      res.json({ text: response.text });
+    } catch (error) {
+      console.error("AI Report Error:", error);
+      res.status(500).json({ error: "Failed to generate AI report" });
+    }
+  });
+
+  app.post("/api/ai/analyze-backlog", async (req, res) => {
+    try {
+      const { text } = req.body;
+      const response = await genAI.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [{
+          role: 'user', parts: [{
+            text: `Analiza el siguiente texto libre y extrae una lista de actividades concretas para un backlog. 
+        Para cada actividad:
+        1. Asigna una prioridad basada en el contexto (10 para crítica, 7 para alta, 4 para media, 2 para baja).
+        
+        El formato de salida debe ser un JSON array de objetos con las propiedades "actividad" y "prioridad".
+        
+        Texto: "${text}"`
+          }]
+        }],
+      });
+
+      let jsonText = response.text || "[]";
+      jsonText = jsonText.replace(/```json\n?|```/g, "");
+      res.json(JSON.parse(jsonText));
+    } catch (error) {
+      console.error("AI Backlog Error Detail:", error);
+      res.status(500).json({ error: error.message || "Unknown AI error" });
+    }
   });
 
   // Vite middleware for development

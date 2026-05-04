@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Wand2, Plus, Trash2, Edit2, Check, X, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Type } from "@google/genai";
 
 interface BacklogItem {
   id: number;
@@ -61,56 +60,37 @@ export default function BacklogView() {
     fetchBacklog();
   };
 
-  const filteredBacklog = showAll 
-    ? backlog 
+  const filteredBacklog = showAll
+    ? backlog
     : backlog.filter(item => item.status === 'pendiente');
 
   const handleAiMagic = async () => {
     if (!freeText.trim()) return;
     setIsProcessing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Analiza el siguiente texto libre y extrae una lista de actividades concretas para un backlog. 
-        Para cada actividad:
-        1. Asigna una prioridad basada en el contexto (10 para crítica, 7 para alta, 4 para media, 2 para baja).
-        
-        El formato de salida debe ser un JSON array de objetos con las propiedades "actividad" y "prioridad".
-        
-        Texto: "${freeText}"`,
-        config: {
-          // ... rest of config
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                actividad: { type: Type.STRING },
-                prioridad: { type: Type.INTEGER }
-              },
-              required: ["actividad", "prioridad"]
-            }
-          }
-        }
+      const res = await fetch('/api/ai/analyze-backlog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: freeText })
       });
 
-      const items = JSON.parse(response.text || '[]');
-      
-      for (const item of items) {
-        await fetch('/backlog', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            actividad: item.actividad,
-            prioridad: item.prioridad,
-            status: 'pendiente',
-            area: ''
-          })
-        });
+      const items = await res.json();
+
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          await fetch('/backlog', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              actividad: item.actividad,
+              prioridad: item.prioridad,
+              status: 'pendiente',
+              area: ''
+            })
+          });
+        }
       }
-      
+
       setFreeText('');
       fetchBacklog();
     } catch (error) {
@@ -141,9 +121,9 @@ export default function BacklogView() {
 
   const startEditing = (item: BacklogItem) => {
     setEditingId(item.id);
-    setEditForm({ 
-      actividad: item.actividad, 
-      prioridad: item.prioridad, 
+    setEditForm({
+      actividad: item.actividad,
+      prioridad: item.prioridad,
       status: item.status,
       area: item.area || ''
     });
@@ -203,11 +183,10 @@ export default function BacklogView() {
             <h3 className="text-xl font-bold text-primary">Listado de Backlog</h3>
             <button
               onClick={() => setShowAll(!showAll)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                showAll 
-                  ? 'bg-primary text-white border-primary' 
-                  : 'bg-white text-primary border-primary hover:bg-primary/5'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${showAll
+                ? 'bg-primary text-white border-primary'
+                : 'bg-white text-primary border-primary hover:bg-primary/5'
+                }`}
             >
               {showAll ? 'VER SOLO PENDIENTES' : 'MOSTRAR TODO'}
             </button>
@@ -265,9 +244,8 @@ export default function BacklogView() {
                 ) : (
                   <div className="flex-1 flex flex-col md:flex-row md:items-center gap-4">
                     <div className="flex items-center gap-3 min-w-[150px] flex-wrap">
-                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold text-white ${
-                        PRIORITIES.find(p => p.value === item.prioridad)?.color || 'bg-gray-400'
-                      }`}>
+                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold text-white ${PRIORITIES.find(p => p.value === item.prioridad)?.color || 'bg-gray-400'
+                        }`}>
                         {PRIORITIES.find(p => p.value === item.prioridad)?.label}
                       </span>
                       {inlineEditingAreaId === item.id || !item.area ? (
@@ -294,7 +272,7 @@ export default function BacklogView() {
                           </button>
                         </div>
                       ) : (
-                        <span 
+                        <span
                           onClick={() => {
                             setInlineEditingAreaId(item.id);
                             setTempArea(item.area || '');
@@ -305,14 +283,13 @@ export default function BacklogView() {
                           {item.area}
                         </span>
                       )}
-                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${
-                        item.status === 'terminada' ? 'bg-green-100 text-green-700' :
+                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${item.status === 'terminada' ? 'bg-green-100 text-green-700' :
                         item.status === 'en curso' ? 'bg-blue-100 text-blue-700' :
-                        item.status === 'en espera' ? 'bg-amber-100 text-amber-700' :
-                        item.status === 'en estudio' ? 'bg-purple-100 text-purple-700' :
-                        item.status === 'despriorizado' ? 'bg-gray-100 text-gray-500' :
-                        'bg-slate-100 text-slate-600'
-                      }`}>
+                          item.status === 'en espera' ? 'bg-amber-100 text-amber-700' :
+                            item.status === 'en estudio' ? 'bg-purple-100 text-purple-700' :
+                              item.status === 'despriorizado' ? 'bg-gray-100 text-gray-500' :
+                                'bg-slate-100 text-slate-600'
+                        }`}>
                         {item.status}
                       </span>
                     </div>
