@@ -75,7 +75,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
 
   const fetchBacklog = async () => {
     try {
-      const res = await fetch('/backlog');
+      const res = await fetch('/api/backlog');
       const data = await res.json();
       setBacklogItems(data.filter((item: any) => item.status !== 'terminada' && item.status !== 'despriorizado'));
     } catch (error) {
@@ -125,9 +125,9 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
 
   const fetchTasks = async () => {
     const [planRes, bloquesRes, incidenciasRes] = await Promise.all([
-      fetch(`/tareas?fecha=${selectedDate}`),
-      fetch(`/bloques?fecha=${selectedDate}`),
-      fetch(`/incidencias?fecha=${selectedDate}`)
+      fetch(`/api/tareas?fecha=${selectedDate}`),
+      fetch(`/api/bloques?fecha=${selectedDate}`),
+      fetch(`/api/incidencias?fecha=${selectedDate}`)
     ]);
     const data = await planRes.json();
     const bloques = await bloquesRes.json();
@@ -178,7 +178,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
     const prevDate = prevDateObj.toISOString().split('T')[0];
 
     try {
-      const res = await fetch(`/tareas?fecha=${prevDate}`);
+      const res = await fetch(`/api/tareas?fecha=${prevDate}`);
       const data = await res.json();
       
       // Rule 1: Only if previous day is closed
@@ -223,7 +223,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
 
   const handleAddSuggestion = async (t: Partial<Task> & { backlog_id?: number, newStatus?: string }) => {
     try {
-      await fetch('/tareas', {
+      await fetch('/api/tareas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -238,7 +238,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
 
       // If it's from backlog, update its status
       if (t.backlog_id && t.newStatus) {
-        await fetch(`/backlog/${t.backlog_id}`, {
+        await fetch(`/api/backlog/${t.backlog_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: t.newStatus })
@@ -252,7 +252,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
       }
       
       // Refresh current tasks
-      const res = await fetch(`/tareas?fecha=${selectedDate}`);
+      const res = await fetch(`/api/tareas?fecha=${selectedDate}`);
       const data = await res.json();
       setTasks(data.tasks.map((task: any) => ({
         ...task,
@@ -298,7 +298,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
     }
 
     try {
-      const results = await Promise.all(dates.map(date => fetch(`/tareas?fecha=${date}`).then(r => r.json())));
+      const results = await Promise.all(dates.map(date => fetch(`/api/tareas?fecha=${date}`).then(r => r.json())));
       // Store both tasks and plan for each date
       const allHistorical = results.map(r => ({
         tasks: r.tasks || [],
@@ -418,7 +418,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
       prioridad: priority,
       tiempo_asignado_minutos: getDurationByPriority(priority)
     };
-    const res = await fetch('/tareas', {
+    const res = await fetch('/api/tareas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newTask),
@@ -431,7 +431,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
   };
 
   const deleteTask = async (id: number) => {
-    await fetch(`/tareas/${id}`, { method: 'DELETE' });
+    await fetch(`/api/tareas/${id}`, { method: 'DELETE' });
     setTasks(tasks.filter(t => t.id !== id));
     setSaturationWarning(null);
   };
@@ -439,7 +439,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
   const saveInlineArea = async (id: number) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
-    await fetch(`/tareas/${id}`, {
+    await fetch(`/api/tareas/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...task, area: tempArea })
@@ -465,7 +465,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
   };
 
   const saveEdit = async (id: number) => {
-    const res = await fetch(`/tareas/${id}`, {
+    const res = await fetch(`/api/tareas/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -498,8 +498,8 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
     try {
       // 1. Fetch blocks and incidents
       const [bloquesRes, incidenciasRes] = await Promise.all([
-        fetch(`/bloques?fecha=${selectedDate}`),
-        fetch(`/incidencias?fecha=${selectedDate}`)
+        fetch(`/api/bloques?fecha=${selectedDate}`),
+        fetch(`/api/incidencias?fecha=${selectedDate}`)
       ]);
       const allBloques = await bloquesRes.json();
       const incidencias = await incidenciasRes.json();
@@ -697,7 +697,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
       }
 
       // Persist
-      const planRes = await fetch(`/plan-diario`, {
+      const planRes = await fetch(`/api/plan-diario`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -711,7 +711,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
 
       const savePromises = updatedTasks.map(async (t) => {
         if (!t.id) return;
-        return fetch(`/tareas/${t.id}`, {
+        return fetch(`/api/tareas/${t.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -736,7 +736,7 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
   };
 
   const savePlan = async () => {
-    await fetch(`/plan-diario`, {
+    await fetch(`/api/plan-diario`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 

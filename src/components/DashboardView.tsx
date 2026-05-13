@@ -90,7 +90,7 @@ export default function DashboardView() {
         const results = await Promise.all(
           days14.map(async (dateStr, index) => {
             // Fetch tasks and plan
-            const tRes = await fetch(`/tareas?fecha=${dateStr}`);
+            const tRes = await fetch(`/api/tareas?fecha=${dateStr}`);
             const tData = await tRes.json();
             const dayTasks: Task[] = tData.tasks || [];
             const dayPlan: Plan = tData.plan;
@@ -115,7 +115,7 @@ export default function DashboardView() {
             let opPercentage = 0;
             let dayIncidencias: Incidencia[] = [];
             if (index >= 7) {
-              const iRes = await fetch(`/incidencias?fecha=${dateStr}`);
+              const iRes = await fetch(`/api/incidencias?fecha=${dateStr}`);
               dayIncidencias = await iRes.json();
               opMinutes = dayIncidencias.reduce((acc, inc) => {
                 const [h1, m1] = inc.hora_inicio.split(':').map(Number);

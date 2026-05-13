@@ -107,7 +107,7 @@ export default function HistoryView() {
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/history/accumulated');
+      const res = await fetch('/api/history/accumulated');
       const data = await res.json();
       setTasks(data);
     } catch (error) {

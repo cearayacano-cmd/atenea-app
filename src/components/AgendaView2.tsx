@@ -48,7 +48,7 @@ const getPriorityInfo = (value: number) => {
 
 const EXECUTED_STATUSES = ['en espera', 'en curso', 'en estudio', 'terminada', 'despriorizada'];
 
-export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) => void }) {
+export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) => void }) {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -56,6 +56,7 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
   const [loading, setLoading] = useState(true);
   const [animate, setAnimate] = useState(false);
   const [errorCierre, setErrorCierre] = useState<string | null>(null);
+  const [expandedTaskId, setExpandedTaskId] = useState<number | null>(null);
   
   const [isClosing, setIsClosing] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
@@ -417,7 +418,8 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
           No hay tareas planificadas para esta fecha.
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {(() => {
             const getFirstTime = (timeStr: string | undefined) => {
               if (!timeStr) return '99:99';
@@ -436,9 +438,11 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
             return orderedTasks.map((task) => (
               <div 
                 key={task.id} 
-                className={`latam-card transition-all ${
+                onClick={() => setExpandedTaskId(task.id)}
+                className={`latam-card min-h-[220px] flex flex-col cursor-pointer transition-all duration-300 relative hover:-translate-y-1 hover:shadow-xl ${
                   task.estado_ejecucion === 'terminada' ? 'border-emerald-200 bg-emerald-50/30' : 
-                  task.estado_ejecucion === 'no realizado' ? 'border-red-100 bg-red-50/20' : ''
+                  task.estado_ejecucion === 'no realizado' ? 'border-red-100 bg-red-50/20' : 
+                  task.estado_ejecucion === 'en curso' ? 'border-primary ring-2 ring-primary/20 shadow-lg shadow-primary/10' : ''
                 }`}
               >
                 <div className="flex items-start gap-4 mb-6">
@@ -447,35 +451,7 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
                   </div>
                   
                   <div className="flex-1 space-y-4">
-                    {/* Line 1: Status Chips in a line */}
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { id: 'en espera', label: 'ESPERA', color: 'bg-slate-100 text-slate-600 border-slate-200' },
-                        { id: 'en curso', label: 'CURSO', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-                        { id: 'en estudio', label: 'ESTUDIO', color: 'bg-purple-100 text-purple-700 border-purple-200' },
-                        { id: 'terminada', label: 'LISTO', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-                        { id: 'despriorizada', label: 'DESPRIO', color: 'bg-amber-100 text-amber-700 border-amber-200' },
-                        { id: 'no realizado', label: 'NO REALIZADO', color: 'bg-red-100 text-red-700 border-red-200' },
-                      ].map((state) => (
-                        <button
-                          key={state.id}
-                          disabled={isClosed}
-                          onClick={() => {
-                            const isDone = state.id === 'terminada';
-                            updateTask(task.id, { estado_ejecucion: state.id, completada: isDone });
-                          }}
-                          className={`text-[9px] font-black uppercase tracking-tight px-2.5 py-1 rounded border transition-all cursor-pointer disabled:cursor-not-allowed ${
-                            task.estado_ejecucion === state.id 
-                              ? `${state.color} border-current ring-1 ring-current shadow-sm` 
-                              : 'bg-white text-text-muted border-border-soft opacity-60 hover:opacity-100'
-                          }`}
-                        >
-                          {state.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Line 2: Priority and Time */}
+                    {/* Status removed from here, moved to modal */}
                     <div className="flex items-center gap-4">
                       <span className={`text-[11px] font-bold px-3 py-1 rounded border shadow-sm ${getPriorityInfo(task.prioridad).color}`}>
                         {getPriorityInfo(task.prioridad).label}
@@ -519,140 +495,22 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
                     </div>
 
                     {/* Line 3: Activity */}
-                    <h4 className={`text-2xl font-bold leading-tight ${task.estado_ejecucion === 'terminada' ? 'line-through text-text-muted opacity-70' : 'text-primary'}`}>
-                      {task.actividad}
-                    </h4>
+                    <div className="flex-1 mt-4">
+                      <h4 className={`text-xl md:text-2xl font-bold leading-tight line-clamp-3 ${task.estado_ejecucion === 'terminada' ? 'line-through text-text-muted opacity-70' : 'text-primary'}`}>
+                        {task.actividad}
+                      </h4>
+                    </div>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                  <div>
-                    <label className="block text-xs font-bold text-text-muted uppercase mb-2">Hallazgos Relevantes</label>
-                    <textarea 
-                      disabled={isClosed}
-                      value={task.hallazgos || ''}
-                      onChange={(e) => updateTask(task.id, { hallazgos: e.target.value })}
-                      placeholder="¿Qué aprendiste o descubriste?"
-                      className="w-full p-3 rounded-xl border border-border-soft bg-white text-sm outline-none focus:ring-2 focus:ring-primary min-h-[80px] disabled:bg-bg-main disabled:text-text-muted"
-                    />
-                  </div>
-                  
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-bold text-text-muted uppercase flex items-center">
-                        <LinkIcon size={12} className="mr-1" />
-                        Links o Evidencias (Opcional)
-                      </label>
-                      {!isClosed && (
-                        <button 
-                          onClick={() => {
-                            let currentLinks: string[] = [];
-                            try {
-                              if (task.evidencia) {
-                                const parsed = JSON.parse(task.evidencia);
-                                currentLinks = Array.isArray(parsed) ? parsed : [task.evidencia];
-                              }
-                            } catch (e) {
-                              if (task.evidencia) currentLinks = [task.evidencia];
-                            }
-                            updateTask(task.id, { evidencia: JSON.stringify([...currentLinks, '']) });
-                          }}
-                          className="p-1 bg-primary/10 text-primary rounded hover:bg-primary/20 transition-colors"
-                          title="Agregar otro link"
-                        >
-                          <Plus size={14} />
-                        </button>
-                      )}
-                    </div>
-                    
-                    <div className="space-y-2">
-                      {(() => {
-                        let links: string[] = [''];
-                        try {
-                          if (task.evidencia) {
-                            const parsed = JSON.parse(task.evidencia);
-                            links = Array.isArray(parsed) ? parsed : [task.evidencia];
-                          }
-                        } catch (e) {
-                          if (task.evidencia) links = [task.evidencia];
-                        }
-
-                        if (links.length === 0) links = [''];
-
-                        return links.map((link, idx) => (
-                          <div key={idx} className="relative flex items-center gap-2">
-                            <div className="relative flex-1">
-                              <input 
-                                type="text"
-                                disabled={isClosed}
-                                value={link}
-                                onChange={(e) => {
-                                  const newLinks = [...links];
-                                  newLinks[idx] = e.target.value;
-                                  updateTask(task.id, { evidencia: JSON.stringify(newLinks) });
-                                }}
-                                placeholder="https://... o nombre del archivo"
-                                className="w-full p-2 pl-8 rounded-xl border border-border-soft bg-white text-xs outline-none focus:ring-2 focus:ring-primary disabled:bg-bg-main disabled:text-text-muted"
-                              />
-                              <Paperclip size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-                            </div>
-                            
-                            <div className="flex items-center gap-1">
-                              {link && (link.startsWith('http') || link.startsWith('www')) && (
-                                <a 
-                                  href={link.startsWith('http') ? link : `https://${link}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
-                                  title="Abrir link"
-                                >
-                                  <LinkIcon size={14} />
-                                </a>
-                              )}
-                              {!isClosed && links.length > 1 && (
-                                <button 
-                                  onClick={() => {
-                                    const newLinks = links.filter((_, i) => i !== idx);
-                                    updateTask(task.id, { evidencia: JSON.stringify(newLinks) });
-                                  }}
-                                  className="p-2 text-text-muted hover:text-red-500 transition-colors"
-                                  title="Eliminar"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                    <p className="text-[9px] text-text-muted mt-1 italic">Puedes agregar múltiples links o nombres de archivos.</p>
-                  </div>
-
-                  {task.estado_ejecucion !== 'terminada' && (
-                    <div>
-                      <label className={`block text-xs font-bold uppercase mb-2 flex items-center ${(task.estado_ejecucion === 'no realizado' || !task.estado_ejecucion) ? 'text-accent' : 'text-text-muted'}`}>
-                        <AlertTriangle size={12} className="mr-1" />
-                        Justificación de Desviación {(task.estado_ejecucion === 'no realizado' || !task.estado_ejecucion) ? '*' : ''}
-                      </label>
-                      <textarea 
-                        disabled={isClosed}
-                        required={task.estado_ejecucion === 'no realizado' || !task.estado_ejecucion}
-                        value={task.justificacion || ''}
-                        onChange={(e) => updateTask(task.id, { justificacion: e.target.value })}
-                        placeholder={(task.estado_ejecucion === 'no realizado' || !task.estado_ejecucion) ? "Obligatorio: ¿Por qué no se realizó?" : "¿Por qué no se completó?"}
-                        className={`w-full p-3 rounded-xl border bg-white text-sm outline-none focus:ring-2 min-h-[80px] disabled:bg-bg-main disabled:text-text-muted ${
-                          (task.estado_ejecucion === 'no realizado' || !task.estado_ejecucion) && (!task.justificacion || task.justificacion.trim() === "") 
-                            ? 'border-red-300 focus:ring-red-500' 
-                            : 'border-border-soft focus:ring-primary'
-                        }`}
-                      />
-                    </div>
-                  )}
+                
+                <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
+                   <span className="text-[10px] font-bold text-text-muted uppercase">Estado Actual:</span>
+                   <span className="text-[10px] font-black uppercase tracking-widest text-primary">{task.estado_ejecucion || 'PENDIENTE'}</span>
                 </div>
               </div>
             ));
           })()}
+        </div>
 
           {showUnplannedWarning && (
             <div className="mt-6 p-4 rounded-xl bg-amber-50/50 border border-amber-100/50 flex items-center text-amber-700/80">
@@ -726,6 +584,53 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
           )}
         </div>
       )}
+
+      {/* MOCKUP VISUAL DE PLANIFICACIÓN BAJA (A PETICIÓN DEL USUARIO) */}
+      <div className="mt-12 pt-12 border-t border-slate-200">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Prueba Visual: Integración de Planificación (Backlog)</h3>
+        
+        <div className="flex gap-4 items-stretch group/lane">
+          {/* Etiqueta Lateral de Prioridad */}
+          <div className="w-14 rounded-3xl flex items-center justify-center shadow-lg transition-all text-slate-700" style={{ backgroundColor: '#f1f5f9' }}>
+            <div className="flex flex-col items-center gap-2 py-4">
+              <span className="text-[9px] font-black text-slate-400 bg-white/50 px-2 py-0.5 rounded-full mb-4">
+                3
+              </span>
+              <h5 className="text-[11px] font-black uppercase tracking-[0.3em] -rotate-180 [writing-mode:vertical-lr] whitespace-nowrap drop-shadow-sm">
+                BAJA
+              </h5>
+            </div>
+          </div>
+
+          {/* Contenedor Horizontal de Tareas */}
+          <div className="flex-1 flex gap-4 overflow-x-auto pb-4 pt-1 px-1 custom-scrollbar snap-x">
+            {[1, 2, 3].map(i => (
+              <div 
+                key={i} 
+                className="min-w-[300px] max-w-[300px] bg-white p-5 rounded-3xl border border-slate-200 shadow-sm transition-all relative cursor-pointer snap-start opacity-70 hover:opacity-100 grayscale hover:grayscale-0"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[7px] font-black text-slate-300 uppercase tracking-widest">#{23 + i}</span>
+                  <span className="text-[7px] font-black bg-slate-50 text-slate-400 px-2 py-0.5 rounded-full uppercase">GENERAL</span>
+                </div>
+                
+                <div className="flex items-start gap-3 mb-6 min-h-[40px]">
+                  <p className="text-[11px] font-black text-slate-700 uppercase tracking-tight leading-snug">
+                    {i === 3 ? 'NUEVA ACTIVIDAD' : 'ACTUALIZACIÓN DE DASHBOARD DE CALIDAD'}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                  <div className="flex flex-col">
+                    <span className="text-[6px] font-black text-slate-300 uppercase tracking-tighter">Registrado</span>
+                    <span className="text-[9px] font-bold text-slate-400">13/5/2026</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* Incident Modal */}
       {showIncidentModal && (
@@ -802,6 +707,95 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
           </div>
         </div>
       )}
+
+      {/* MODAL DE TAREA EXPANDIDA */}
+      {expandedTaskId && tasks.find(t => t.id === expandedTaskId) && (() => {
+        const t = tasks.find(x => x.id === expandedTaskId)!;
+        return (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="p-8 border-b border-slate-100 bg-slate-50 flex items-start justify-between">
+                <div>
+                  <span className={`text-[10px] font-bold px-3 py-1 rounded-full border shadow-sm ${getPriorityInfo(t.prioridad).color}`}>
+                    {getPriorityInfo(t.prioridad).label}
+                  </span>
+                  <h3 className="text-2xl font-black text-slate-800 mt-4 leading-tight">{t.actividad}</h3>
+                </div>
+                <button onClick={() => setExpandedTaskId(null)} className="p-2 bg-white rounded-full text-slate-400 hover:text-slate-800 shadow-sm border border-slate-100 transition-all">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-8">
+                {/* Status Selection */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Estado de Ejecución</label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: 'en espera', label: 'ESPERA', color: 'bg-slate-100 text-slate-600 border-slate-200' },
+                      { id: 'en curso', label: 'EN CURSO', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+                      { id: 'en estudio', label: 'ESTUDIO', color: 'bg-purple-100 text-purple-700 border-purple-200' },
+                      { id: 'terminada', label: 'COMPLETADO', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+                      { id: 'despriorizada', label: 'DESPRIORIZADA', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+                      { id: 'no realizado', label: 'NO REALIZADO', color: 'bg-red-100 text-red-700 border-red-200' },
+                    ].map((state) => (
+                      <button
+                        key={state.id}
+                        disabled={isClosed}
+                        onClick={() => {
+                          const isDone = state.id === 'terminada';
+                          updateTask(t.id, { estado_ejecucion: state.id, completada: isDone });
+                        }}
+                        className={`text-[11px] font-black uppercase tracking-wider px-4 py-3 rounded-xl border-2 transition-all cursor-pointer disabled:cursor-not-allowed flex-1 min-w-[120px] ${
+                          t.estado_ejecucion === state.id 
+                            ? `${state.color} border-current shadow-md scale-105` 
+                            : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {state.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Hallazgos Relevantes</label>
+                    <textarea 
+                      disabled={isClosed}
+                      value={t.hallazgos || ''}
+                      onChange={(e) => updateTask(t.id, { hallazgos: e.target.value })}
+                      placeholder="¿Qué descubriste durante la ejecución?"
+                      className="w-full p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 text-sm font-medium outline-none focus:border-primary focus:bg-white min-h-[120px] transition-all resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-[10px] font-black tracking-widest uppercase mb-3 ${(t.estado_ejecucion === 'no realizado' || !t.estado_ejecucion) ? 'text-accent' : 'text-slate-400'}`}>
+                      Justificación {(t.estado_ejecucion === 'no realizado' || !t.estado_ejecucion) && '*'}
+                    </label>
+                    <textarea 
+                      disabled={isClosed}
+                      value={t.justificacion || ''}
+                      onChange={(e) => updateTask(t.id, { justificacion: e.target.value })}
+                      placeholder={t.estado_ejecucion === 'no realizado' ? "Obligatorio: ¿Por qué no se completó?" : "Opcional"}
+                      className={`w-full p-4 rounded-2xl border-2 text-sm font-medium outline-none min-h-[120px] transition-all resize-none ${
+                        (t.estado_ejecucion === 'no realizado' || !t.estado_ejecucion) && (!t.justificacion || t.justificacion.trim() === "")
+                          ? 'border-red-300 bg-red-50 focus:border-red-500' 
+                          : 'border-slate-100 bg-slate-50 focus:border-primary focus:bg-white'
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button onClick={() => setExpandedTaskId(null)} className="px-8 py-4 bg-primary text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-primary-soft shadow-lg shadow-primary/20 transition-all">
+                  Cerrar Detalles
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

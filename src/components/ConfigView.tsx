@@ -36,7 +36,7 @@ export default function ConfigView() {
   }, []);
 
   const fetchConfig = () => {
-    fetch(`/tareas?fecha=${startDate}`)
+    fetch(`/api/tareas?fecha=${startDate}`)
       .then(res => res.json())
       .then(data => {
         if (data && data.plan) {
@@ -48,7 +48,7 @@ export default function ConfigView() {
   };
 
   const fetchBloques = () => {
-    fetch('/bloques')
+    fetch('/api/bloques')
       .then(res => res.json())
       .then(data => setBloques(data));
   };
@@ -80,7 +80,7 @@ export default function ConfigView() {
     try {
       const dates = getDatesInRange(startDate, endDate);
       const promises = dates.map(date => 
-        fetch('/plan-diario', {
+        fetch('/api/plan-diario', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -137,7 +137,7 @@ export default function ConfigView() {
 
   const addBloque = async (bloqueData: any) => {
     try {
-      const res = await fetch('/bloques', {
+      const res = await fetch('/api/bloques', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bloqueData),
@@ -152,7 +152,7 @@ export default function ConfigView() {
 
   const deleteBloque = async (id: number) => {
     try {
-      const res = await fetch(`/bloques/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/bloques/${id}`, { method: 'DELETE' });
       if (res.ok) {
         fetchBloques();
       }
@@ -167,7 +167,7 @@ export default function ConfigView() {
     }
 
     try {
-      const res = await fetch('/reset-database', { method: 'POST' });
+      const res = await fetch('/api/reset-database', { method: 'POST' });
       if (res.ok) {
         window.alert?.('Base de datos reiniciada correctamente.');
         window.location.reload();

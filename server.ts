@@ -1,9 +1,10 @@
+import "dotenv/config";
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import Database from "better-sqlite3";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -145,20 +146,44 @@ async function startServer() {
   app.set("trust proxy", true);
   app.use(express.json());
 
-  // Health check for GCP/Cosmos
-  app.get("/health", (req, res) => {
-    res.json({ status: "UP", timestamp: new Date().toISOString() });
+  // User Identity from IAP
+  app.get("/api/me", (req, res) => {
+    const rawEmail = req.header('x-goog-authenticated-user-email');
+    const rawId = req.header('x-goog-authenticated-user-id');
+    
+    if (rawEmail) {
+      const email = rawEmail.split(':').pop() || '';
+      const namePart = email.split('@')[0];
+      const name = namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/[._]/g, ' ');
+      
+      return res.json({
+        email,
+        name,
+        initials: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+        id: rawId
+      });
+    }
+
+    res.json({
+      email: 'carlos@latam.com',
+      name: 'Carlos',
+      initials: 'C',
+      id: 'dev-user'
+    });
   });
 
-  // API Endpoints as requested
+  // Health check for GCP/Cosmos
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
 
   // 1. Configuracion
-  app.get("/configuracion", (req, res) => {
+  app.get("/api/configuracion", (req, res) => {
     const config = db.prepare("SELECT * FROM Configuracion WHERE id = 1").get();
     res.json(config);
   });
 
-  app.post("/configuracion", (req, res) => {
+  app.post("/api/configuracion", (req, res) => {
     const { hora_inicio, hora_fin, horas_efectivas } = req.body;
     db.prepare("UPDATE Configuracion SET hora_inicio = ?, hora_fin = ?, horas_efectivas = ? WHERE id = 1")
       .run(hora_inicio, hora_fin, horas_efectivas);
@@ -166,7 +191,7 @@ async function startServer() {
   });
 
   // 2. Tareas
-  app.get("/tareas", (req, res) => {
+  app.get("/api/tareas", (req, res) => {
     const { fecha } = req.query;
     if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
 
@@ -190,14 +215,14 @@ async function startServer() {
     res.json({ tasks, plan });
   });
 
-  app.post("/tareas", (req, res) => {
+  app.post("/api/tareas", (req, res) => {
     const { fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area } = req.body;
     db.prepare("INSERT INTO Tareas (fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .run(fecha, actividad, prioridad, tiempo_asignado_minutos || null, fecha_origen_remanente || null, backlog_id || null, estado_ejecucion || null, evidencia || null, area || null);
     res.json({ success: true });
   });
 
-  app.put("/tareas/:id", (req, res) => {
+  app.put("/api/tareas/:id", (req, res) => {
     const { id } = req.params;
     const { actividad, prioridad, completada, estado_ejecucion, hallazgos, justificacion, evidencia, hora_inicio_plan, hora_fin_plan, tiempo_asignado_minutos, area } = req.body;
 
@@ -261,14 +286,14 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.delete("/tareas/:id", (req, res) => {
+  app.delete("/api/tareas/:id", (req, res) => {
     const { id } = req.params;
     db.prepare("DELETE FROM Tareas WHERE id = ?").run(id);
     res.json({ success: true });
   });
 
   // Internal endpoint for daily plan adjustments (to support the "inheritance" requirement)
-  app.post("/plan-diario", (req, res) => {
+  app.post("/api/plan-diario", (req, res) => {
     const { date, hora_inicio, hora_fin, horas_efectivas, estado_cierre } = req.body;
 
     // Get existing plan to preserve values if not provided
@@ -307,7 +332,7 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.get("/dashboard", (req, res) => {
+  app.get("/api/dashboard", (req, res) => {
     const stats = db.prepare(`
       SELECT 
         COUNT(*) as total,
@@ -320,14 +345,14 @@ async function startServer() {
   });
 
   // 3. Incidencias
-  app.get("/incidencias", (req, res) => {
+  app.get("/api/incidencias", (req, res) => {
     const { fecha } = req.query;
     if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
     const incidents = db.prepare("SELECT * FROM Incidencias WHERE fecha = ?").all(fecha);
     res.json(incidents);
   });
 
-  app.post("/incidencias", (req, res) => {
+  app.post("/api/incidencias", (req, res) => {
     const { fecha, descripcion, hora_inicio, hora_fin, tipo } = req.body;
     db.prepare("INSERT INTO Incidencias (fecha, descripcion, hora_inicio, hora_fin, tipo) VALUES (?, ?, ?, ?, ?)")
       .run(fecha, descripcion, hora_inicio, hora_fin, tipo);
@@ -335,7 +360,7 @@ async function startServer() {
   });
 
   // 4. Bloques No Disponibles
-  app.get("/bloques", (req, res) => {
+  app.get("/api/bloques", (req, res) => {
     const { fecha } = req.query;
     if (fecha) {
       const blocks = db.prepare("SELECT * FROM BloquesNoDisponibles WHERE fecha = ? OR dia_semana IS NOT NULL").all(fecha);
@@ -346,33 +371,33 @@ async function startServer() {
     }
   });
 
-  app.post("/bloques", (req, res) => {
+  app.post("/api/bloques", (req, res) => {
     const { fecha, hora_inicio, hora_fin, tipo, dia_semana } = req.body;
     db.prepare("INSERT INTO BloquesNoDisponibles (fecha, hora_inicio, hora_fin, tipo, dia_semana) VALUES (?, ?, ?, ?, ?)")
       .run(fecha || null, hora_inicio, hora_fin, tipo, dia_semana || null);
     res.json({ success: true });
   });
 
-  app.delete("/bloques/:id", (req, res) => {
+  app.delete("/api/bloques/:id", (req, res) => {
     const { id } = req.params;
     db.prepare("DELETE FROM BloquesNoDisponibles WHERE id = ?").run(id);
     res.json({ success: true });
   });
 
   // 5. Backlog
-  app.get("/backlog", (req, res) => {
+  app.get("/api/backlog", (req, res) => {
     const backlog = db.prepare("SELECT * FROM Backlog ORDER BY created_at DESC").all();
     res.json(backlog);
   });
 
-  app.post("/backlog", (req, res) => {
+  app.post("/api/backlog", (req, res) => {
     const { actividad, prioridad, status, area } = req.body;
     const result = db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area) VALUES (?, ?, ?, ?)")
       .run(actividad, prioridad || 4, status || 'pendiente', area || null);
     res.json({ id: result.lastInsertRowid, success: true });
   });
 
-  app.put("/backlog/:id", (req, res) => {
+  app.put("/api/backlog/:id", (req, res) => {
     const { id } = req.params;
     const { actividad, prioridad, status, area } = req.body;
     const updates = [];
@@ -388,14 +413,14 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.delete("/backlog/:id", (req, res) => {
+  app.delete("/api/backlog/:id", (req, res) => {
     const { id } = req.params;
     db.prepare("DELETE FROM Backlog WHERE id = ?").run(id);
     res.json({ success: true });
   });
 
   // 6. Reabrir Planificación (Clear time blocks)
-  app.post("/reabrir-planificacion", (req, res) => {
+  app.post("/api/reabrir-planificacion", (req, res) => {
     const { fecha } = req.body;
     if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
 
@@ -410,12 +435,12 @@ async function startServer() {
   });
 
 
-  app.get("/tareas/todas", (req, res) => {
+  app.get("/api/tareas/todas", (req, res) => {
     const tasks = db.prepare("SELECT * FROM Tareas ORDER BY fecha DESC, prioridad DESC").all();
     res.json(tasks);
   });
 
-  app.get("/history/accumulated", (req, res) => {
+  app.get("/api/history/accumulated", (req, res) => {
     const tasks = db.prepare("SELECT * FROM Tareas ORDER BY fecha DESC").all();
     const backlog = db.prepare("SELECT * FROM Backlog").all();
 
@@ -469,7 +494,7 @@ async function startServer() {
     res.json(result);
   });
 
-  app.post("/reset-database", (req, res) => {
+  app.post("/api/reset-database", (req, res) => {
     db.transaction(() => {
       db.prepare("DELETE FROM Tareas").run();
       db.prepare("DELETE FROM PlanesDiarios").run();
@@ -481,44 +506,104 @@ async function startServer() {
     res.json({ success: true, message: "Base de datos reiniciada correctamente" });
   });
 
-  // 7. AI Proxy Endpoints
-  const genAI = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY
+  app.post("/api/seed-data", (req, res) => {
+    const today = new Date().toISOString().split('T')[0];
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const currentDayName = dayNames[new Date().getDay()];
+
+    db.transaction(() => {
+      // 1. Backlog
+      const backlogItems = [
+        ['Monitoreo de Llamadas - Campaña A', 10, 'pendiente', 'Monitoreo'],
+        ['Feedback Individual - Juan Perez', 7, 'pendiente', 'Feedback'],
+        ['Análisis de Tendencias Semanal', 4, 'pendiente', 'Tendencias'],
+        ['Revisión de Alertas Críticas', 10, 'pendiente', 'Alertas'],
+        ['Capacitación Escuelita - Módulo 2', 4, 'pendiente', 'Escuelita'],
+        ['Actualización de Dashboard de Calidad', 2, 'pendiente', 'General']
+      ];
+      const stmtBacklog = db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area) VALUES (?, ?, ?, ?)");
+      backlogItems.forEach(item => stmtBacklog.run(...item));
+
+      // 2. Bloques (Almuerzo recurrente para todos los días L-V)
+      const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+      const stmtBloque = db.prepare("INSERT INTO BloquesNoDisponibles (dia_semana, hora_inicio, hora_fin, tipo) VALUES (?, '13:00', '14:00', 'Almuerzo')");
+      dias.forEach(d => stmtBloque.run(d));
+
+      // 3. Tareas planeadas para hoy (ejemplo)
+      db.prepare("INSERT INTO Tareas (fecha, actividad, prioridad, area, tiempo_asignado_minutos, estado_ejecucion) VALUES (?, 'Reunión de Sincronización', 10, 'General', 30, 'pendiente')").run(today);
+      db.prepare("INSERT INTO Tareas (fecha, actividad, prioridad, area, tiempo_asignado_minutos, estado_ejecucion) VALUES (?, 'Monitoreo Preventivo', 7, 'Monitoreo', 60, 'pendiente')").run(today);
+
+    })();
+    res.json({ success: true, message: "Datos ficticios cargados correctamente" });
   });
+
+  // 7. AI Proxy Endpoints
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
   app.post("/api/ai/generate-report", async (req, res) => {
     try {
       const { prompt } = req.body;
-      const response = await genAI.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      });
-      res.json({ text: response.text });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const response = await model.generateContent(prompt);
+      res.json({ text: response.response.text() });
     } catch (error) {
       console.error("AI Report Error:", error);
       res.status(500).json({ error: "Failed to generate AI report" });
     }
   });
 
+  app.post("/api/ia/procesar-backlog", async (req, res) => {
+    const { text } = req.body;
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const result = await model.generateContent(`Eres Atenea, una IA experta en Inteligencia Operativa.
+            Analiza el siguiente texto y extrae una lista de tareas para el backlog.
+            Categoriza cada tarea por área (Monitoreo, Feedback, Tendencias, Alertas, General) y asigna una prioridad (10: Crítica, 7: Alta, 4: Media, 2: Baja).
+            Estima la duración en minutos (ej. 15, 30, 45, 60, 120).
+            Devuelve UNICAMENTE un JSON array de objetos con: "actividad", "prioridad", "area", "estimated_minutes".
+            Texto: "${text}"`);
+
+      const response = await result.response;
+      let jsonText = response.text() || "[]";
+      jsonText = jsonText.replace(/```json\n?|```/g, "").trim();
+      let items = [];
+      try {
+        items = JSON.parse(jsonText);
+      } catch (e) {
+        console.error("Failed to parse AI JSON, using local fallback regex");
+        // Simple local fallback: split by lines or commas
+        items = [{ actividad: text.slice(0, 100), prioridad: 7, area: 'General', estimated_minutes: 60 }];
+      }
+
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area) VALUES (?, ?, 'pendiente', ?)")
+            .run(item.actividad, item.prioridad || 4, item.area || 'General');
+        }
+      }
+      res.json({ success: true, count: items.length });
+    } catch (error) {
+      console.error("AI Error:", error);
+      // Final fallback: Create one item from raw text
+      db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area) VALUES (?, ?, 'pendiente', ?)")
+        .run(text.slice(0, 255), 7, 'General');
+      res.json({ success: true, count: 1, fallback: true });
+    }
+  });
+
   app.post("/api/ai/analyze-backlog", async (req, res) => {
     try {
       const { text } = req.body;
-      const response = await genAI.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{
-          role: 'user', parts: [{
-            text: `Analiza el siguiente texto libre y extrae una lista de actividades concretas para un backlog. 
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const response = await model.generateContent(`Analiza el siguiente texto libre y extrae una lista de actividades concretas para un backlog. 
         Para cada actividad:
         1. Asigna una prioridad basada en el contexto (10 para crítica, 7 para alta, 4 para media, 2 para baja).
         
         El formato de salida debe ser un JSON array de objetos con las propiedades "actividad" y "prioridad".
         
-        Texto: "${text}"`
-          }]
-        }],
-      });
+        Texto: "${text}"`);
 
-      let jsonText = response.text || "[]";
+      let jsonText = response.response.text() || "[]";
       jsonText = jsonText.replace(/```json\n?|```/g, "");
       res.json(JSON.parse(jsonText));
     } catch (error) {

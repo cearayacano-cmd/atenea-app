@@ -8,23 +8,33 @@ import { Settings, Calendar, ListChecks, LayoutDashboard, Menu, X, History } fro
 import { motion, AnimatePresence } from 'motion/react';
 import HomeView from './components/HomeView';
 import ConfigView from './components/ConfigView';
+import ConfigView2 from './components/ConfigView2';
 import PlanningView from './components/PlanningView';
 import AgendaView from './components/AgendaView';
+import AgendaView2 from './components/AgendaView2';
 import DashboardView from './components/DashboardView';
 import BacklogView from './components/BacklogView';
 import HistoryView from './components/HistoryView';
 
-type View = 'home' | 'config' | 'planning' | 'agenda' | 'dashboard' | 'backlog' | 'history';
+type View = 'home' | 'config' | 'config2' | 'planning' | 'agenda' | 'agenda2' | 'dashboard' | 'backlog' | 'history';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<View>('home');
+  const [currentView, setCurrentView] = useState<View>('config2');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [user, setUser] = useState({ name: 'Cargando...', email: '', initials: '...' });
+
+  useEffect(() => {
+    fetch('/api/me')
+      .then(res => res.json())
+      .then(data => setUser(data))
+      .catch(err => console.error("Error fetching user:", err));
+  }, []);
 
   const navItems = [
-    { id: 'config', label: 'Disponibilidad', icon: Settings },
-    { id: 'backlog', label: 'Backlog', icon: ListChecks },
-    { id: 'planning', label: 'Planificación', icon: Calendar },
-    { id: 'agenda', label: 'Agenda del Día', icon: ListChecks },
+    { id: 'config2', label: 'Centro de Módulo', icon: Settings },
+    { id: 'planning', label: 'Planificación Clásica', icon: Calendar },
+    { id: 'agenda', label: 'Agenda del Día 1', icon: ListChecks },
+    { id: 'agenda2', label: 'Agenda del Día 2', icon: ListChecks },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'history', label: 'Historial', icon: History },
   ];
@@ -85,13 +95,13 @@ export default function App() {
 
             <div className="p-6 border-t border-white/10">
               <div className="flex items-center text-white">
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">
-                  LN
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold uppercase">
+                  {user.initials}
                 </div>
                 {isSidebarOpen && (
                   <div className="ml-3 overflow-hidden">
-                    <p className="text-sm font-medium truncate">Lina Narváez</p>
-                    <p className="text-xs text-white/60 truncate">lina.narvaezC@latam.com</p>
+                    <p className="text-sm font-medium truncate">{user.name}</p>
+                    <p className="text-xs text-white/60 truncate">{user.email}</p>
                   </div>
                 )}
               </div>
@@ -116,9 +126,11 @@ export default function App() {
                   transition={{ duration: 0.2 }}
                 >
                   {currentView === 'config' && <ConfigView />}
+                  {currentView === 'config2' && <ConfigView2 />}
                   {currentView === 'backlog' && <BacklogView />}
                   {currentView === 'planning' && <PlanningView onNavigate={(v) => setCurrentView(v as View)} />}
                   {currentView === 'agenda' && <AgendaView onNavigate={(v) => setCurrentView(v as View)} />}
+                  {currentView === 'agenda2' && <AgendaView2 onNavigate={(v) => setCurrentView(v as View)} />}
                   {currentView === 'history' && <HistoryView />}
                   {currentView === 'dashboard' && <DashboardView />}
                 </motion.div>

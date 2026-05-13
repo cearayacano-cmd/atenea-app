@@ -43,7 +43,7 @@ export default function BacklogView() {
   }, []);
 
   const fetchBacklog = async () => {
-    const res = await fetch('/backlog');
+    const res = await fetch('/api/backlog');
     const data = await res.json();
     setBacklog(data);
   };
@@ -51,7 +51,7 @@ export default function BacklogView() {
   const saveInlineArea = async (id: number) => {
     const item = backlog.find(i => i.id === id);
     if (!item) return;
-    await fetch(`/backlog/${id}`, {
+    await fetch(`/api/backlog/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...item, area: tempArea })
@@ -78,7 +78,7 @@ export default function BacklogView() {
 
       if (Array.isArray(items)) {
         for (const item of items) {
-          await fetch('/backlog', {
+          await fetch('/api/backlog', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -101,7 +101,7 @@ export default function BacklogView() {
   };
 
   const handleAddManual = async () => {
-    await fetch('/backlog', {
+    await fetch('/api/backlog', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -115,7 +115,7 @@ export default function BacklogView() {
   };
 
   const handleDelete = async (id: number) => {
-    await fetch(`/backlog/${id}`, { method: 'DELETE' });
+    await fetch(`/api/backlog/${id}`, { method: 'DELETE' });
     fetchBacklog();
   };
 
@@ -130,7 +130,7 @@ export default function BacklogView() {
   };
 
   const saveEdit = async (id: number) => {
-    await fetch(`/backlog/${id}`, {
+    await fetch(`/api/backlog/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editForm)
