@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle2, Circle, AlertTriangle, Calendar as CalendarIcon, Save, PlusCircle, Clock, Tag, X, Loader2, Link as LinkIcon, Paperclip, Plus, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { CheckCircle2, Circle, AlertTriangle, Calendar as CalendarIcon, Save, PlusCircle, Clock, Tag, X, Loader2, Link as LinkIcon, Paperclip, Plus, Trash2, BrainCircuit, Activity, TrendingUp, BarChart3, CheckCircle, Zap, ListChecks } from 'lucide-react';
 
 interface Task {
   id: number;
@@ -14,6 +15,7 @@ interface Task {
   hora_inicio_plan?: string;
   hora_fin_plan?: string;
   tiempo_asignado_minutos?: number;
+  tiempo_invertido_minutos?: number;
   backlog_id?: number;
 }
 
@@ -36,27 +38,204 @@ interface Incidencia {
   tipo: string;
 }
 
+interface Bloque {
+  id: number;
+  fecha: string | null;
+  dia_semana: string | null;
+  hora_inicio: string;
+  hora_fin: string;
+  tipo: string;
+}
+
 const getPriorityInfo = (value: number) => {
   switch (value) {
-    case 10: return { label: 'CRÍTICA', color: 'bg-accent/10 text-accent border-accent/20' };
-    case 7: return { label: 'ALTA', color: 'bg-primary/10 text-primary border-primary/20' };
-    case 4: return { label: 'MEDIA', color: 'bg-blue-50 text-blue-600 border-blue-100' };
-    case 2: return { label: 'BAJA', color: 'bg-slate-100 text-slate-700 border-slate-200' };
-    default: return { label: 'MEDIA', color: 'bg-blue-50 text-blue-600 border-blue-100' };
+    case 10: return { label: 'CRÍTICA', color: 'bg-[#FF4B4B]', text: 'text-white' };
+    case 7: return { label: 'ALTA', color: 'bg-[#FF9F1C]', text: 'text-white' };
+    case 4: return { label: 'MEDIA', color: 'bg-[#2D7FF9]', text: 'text-white' };
+    case 2: return { label: 'BAJA', color: 'bg-[#94A3B8]', text: 'text-white' };
+    default: return { label: 'MEDIA', color: 'bg-[#2D7FF9]', text: 'text-white' };
   }
 };
 
 const EXECUTED_STATUSES = ['en espera', 'en curso', 'en estudio', 'terminada', 'despriorizada'];
 
-export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) => void }) {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+const getFirstTime = (timeStr: string | undefined) => {
+  if (!timeStr) return '--:--';
+  try {
+    const parsed = JSON.parse(timeStr);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+  } catch (e) {}
+  return timeStr;
+};
+
+function TaskCard({ task, isClosed, updateTask, getFirstTime, onOpenDetails }: { 
+  task: Task, 
+  isClosed: boolean, 
+  updateTask: (id: number, updates: Partial<Task>) => Promise<void>,
+  getFirstTime: (timeStr: string | undefined) => string,
+  onOpenDetails: (task: Task) => void
+}) {
+  const statusColors: Record<string, string> = {
+    'nuevo': 'text-cyan-500 bg-cyan-50',
+    'abierto': 'text-purple-500 bg-purple-50',
+    'pendiente': 'text-blue-500 bg-blue-50',
+    'en espera': 'text-amber-500 bg-amber-50',
+    'resuelto': 'text-emerald-500 bg-emerald-50',
+    'despriorizado': 'text-slate-500 bg-slate-50',
+    'fallido': 'text-red-500 bg-red-50'
+  };
+
+  return (
+    <motion.div 
+      layout
+      className={`bg-white rounded-[24px] border border-slate-100 hover:border-primary/40 transition-all duration-300 shadow-sm hover:shadow-xl flex flex-col p-5 gap-4 relative group ${
+        task.estado_ejecucion === 'terminada' ? 'bg-emerald-50/5' : ''
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex flex-wrap gap-2">
+          <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase text-white shadow-sm ${getPriorityInfo(task.prioridad).color}`}>
+            {getPriorityInfo(task.prioridad).label}
+          </span>
+          {task.area && (
+            <span className="text-[8px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-lg uppercase border border-slate-200/50">{task.area}</span>
+          )}
+        </div>
+        <div className={`transition-all duration-500 ${task.estado_ejecucion === 'terminada' ? 'text-emerald-500 scale-110' : 'text-slate-200'}`}>
+          {task.estado_ejecucion === 'terminada' ? <CheckCircle2 size={20} /> : <Circle size={20} />}
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-[44px]">
+        <h4 className={`text-[13px] font-black leading-tight line-clamp-2 transition-all ${task.estado_ejecucion === 'terminada' ? 'text-slate-300' : 'text-slate-700'}`}>
+          {task.actividad}
+        </h4>
+      </div>
+
+      <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-50">
+        <div className="flex items-center gap-2">
+          <span className={`text-[9px] font-black px-2.5 py-1.5 rounded-xl uppercase tracking-tighter shadow-sm ${statusColors[task.estado_ejecucion] || 'text-slate-400 bg-slate-50'}`}>
+            {task.estado_ejecucion === 'nuevo' ? 'NUEVO' :
+             task.estado_ejecucion === 'abierto' ? 'ABIERTO' :
+             task.estado_ejecucion === 'pendiente' ? 'PENDIENTE' : 
+             task.estado_ejecucion === 'en espera' ? 'EN ESPERA' :
+             task.estado_ejecucion === 'resuelto' ? 'RESUELTO' :
+             task.estado_ejecucion === 'despriorizado' ? 'DESPRIORIZADO' :
+             task.estado_ejecucion === 'fallido' ? 'FALLIDO' : 'NUEVO'}
+          </span>
+          {task.hora_inicio_plan && (
+            <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg">
+              <Clock size={12} className="text-slate-300" /> {getFirstTime(task.hora_inicio_plan)}
+            </div>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <div className="flex -space-x-1">
+            {task.hallazgos && <div className="w-2.5 h-2.5 rounded-full bg-primary border-2 border-white shadow-sm" title="Hallazgos" />}
+            {task.evidencia && <div className="w-2.5 h-2.5 rounded-full bg-blue-400 border-2 border-white shadow-sm" title="Evidencias" />}
+            {task.justificacion && <div className="w-2.5 h-2.5 rounded-full bg-red-400 border-2 border-white shadow-sm" title="Justificación" />}
+          </div>
+          
+          <button 
+            onClick={() => onOpenDetails(task)}
+            className="p-2.5 bg-slate-900 text-white hover:bg-primary transition-all rounded-2xl shadow-lg shadow-slate-200 hover:scale-110 active:scale-95"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function IncidentCard({ incident }: { incident: Incidencia }) {
+  return (
+    <motion.div 
+      layout
+      className="bg-gradient-to-br from-amber-50/50 to-white rounded-[24px] border border-amber-100 shadow-sm hover:shadow-xl transition-all duration-300 p-5 flex flex-col gap-4 relative overflow-hidden group"
+    >
+      <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+        <AlertTriangle size={60} className="text-amber-500" />
+      </div>
+
+      <div className="flex items-start justify-between">
+        <span className="text-[8px] font-black px-2 py-1 rounded-lg uppercase bg-amber-500 text-white shadow-md shadow-amber-100 flex items-center gap-1.5">
+          <AlertTriangle size={10} /> {incident.tipo}
+        </span>
+        <div className="text-[10px] font-black text-amber-600 bg-amber-100/50 px-2 py-1 rounded-lg flex items-center gap-1.5">
+          <Clock size={12} /> {incident.hora_inicio} - {incident.hora_fin}
+        </div>
+      </div>
+
+      <div className="flex-1">
+        <h4 className="text-[13px] font-black leading-tight text-amber-900 line-clamp-3">
+          {incident.descripcion}
+        </h4>
+      </div>
+
+      <div className="mt-auto pt-3 border-t border-amber-100 flex items-center justify-between">
+        <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Actividad No Planificada</span>
+        <div className="flex gap-1">
+          <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function BlockCard({ block }: { block: Bloque }) {
+  return (
+    <motion.div 
+      layout
+      className="bg-slate-50 rounded-[24px] border border-slate-200/50 shadow-sm hover:shadow-md transition-all duration-300 p-5 flex flex-col gap-4 relative overflow-hidden group border-dashed"
+    >
+      <div className="absolute top-0 right-0 p-4 opacity-5">
+        <Clock size={60} className="text-slate-400" />
+      </div>
+
+      <div className="flex items-start justify-between">
+        <span className="text-[8px] font-black px-2 py-1 rounded-lg uppercase bg-slate-200 text-slate-500 shadow-sm flex items-center gap-1.5">
+          <Clock size={10} /> BLOQUE OPERATIVO
+        </span>
+        <div className="text-[10px] font-black text-slate-500 bg-white border border-slate-100 px-2 py-1 rounded-lg flex items-center gap-1.5">
+           {block.hora_inicio} - {block.hora_fin}
+        </div>
+      </div>
+
+      <div className="flex-1">
+        <h4 className="text-[13px] font-black leading-tight text-slate-600">
+          {block.tipo}
+        </h4>
+        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sincronizado de Centro de Módulo</p>
+      </div>
+
+      <div className="mt-auto pt-3 border-t border-slate-200/50 flex items-center justify-between">
+        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Reserva de Tiempo</span>
+        <div className="flex gap-1">
+          <div className="w-2 h-2 rounded-full bg-slate-300" />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate }: { 
+  onNavigate?: (view: any) => void,
+  selectedDate: string,
+  setSelectedDate: (date: string) => void
+}) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
+  const [bloques, setBloques] = useState<Bloque[]>([]);
   const [loading, setLoading] = useState(true);
   const [animate, setAnimate] = useState(false);
+  const [weeklyTrend, setWeeklyTrend] = useState<{ day: string, percentage: number }[]>([]);
+  const [weeklyOperativo, setWeeklyOperativo] = useState({ avgPercentage: 0, totalMinutes: 0 });
+  const [reincidenciaPattern, setReincidenciaPattern] = useState<'green' | 'yellow' | 'red'>('green');
   const [errorCierre, setErrorCierre] = useState<string | null>(null);
-  const [expandedTaskId, setExpandedTaskId] = useState<number | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   
   const [isClosing, setIsClosing] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
@@ -89,16 +268,82 @@ export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) =
     try {
       const res = await fetch(`/api/tareas?fecha=${selectedDate}`);
       const data = await res.json();
-      setTasks(data.tasks.map((t: any) => ({
+      const tasksList = Array.isArray(data.tasks) ? data.tasks : [];
+      setTasks(tasksList.map((t: any) => ({
         ...t,
         completada: t.completada === 1,
-        estado_ejecucion: t.estado_ejecucion || null
+        estado_ejecucion: t.estado_ejecucion || 'en espera'
       })));
-      setPlan(data.plan);
+      setPlan(data.plan || null);
       
       const incRes = await fetch(`/api/incidencias?fecha=${selectedDate}`);
       const incData = await incRes.json();
-      setIncidencias(incData);
+      setIncidencias(Array.isArray(incData) ? incData : []);
+
+      const bloqRes = await fetch('/api/bloques');
+      const bloqData = await bloqRes.json();
+      
+      // Filtrar bloques por fecha específica o día de la semana
+      const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const currentDayName = dayNames[new Date(selectedDate + 'T12:00:00').getDay()];
+      
+      const filteredBloques = Array.isArray(bloqData) ? bloqData.filter((b: Bloque) => {
+        if (b.fecha === selectedDate) return true;
+        if (b.dia_semana === currentDayName) return true;
+        return false;
+      }) : [];
+      setBloques(filteredBloques);
+
+      // --- Lógica de Dashboard Integrada (Tendencia Semanal) ---
+      const anchorDate = new Date(selectedDate + 'T00:00:00');
+      const EXECUTED_STATUSES = ['en espera', 'en curso', 'en estudio', 'terminada', 'despriorizada'];
+      
+      const last7Days = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(anchorDate);
+        d.setDate(anchorDate.getDate() - i);
+        last7Days.push(d.toISOString().split('T')[0]);
+      }
+
+      const historyData = await Promise.all(
+        last7Days.map(async (dStr) => {
+          const tRes = await fetch(`/api/tareas?fecha=${dStr}`);
+          const tData = await tRes.json();
+          const dayTasks: any[] = tData.tasks || [];
+          
+          const pTotal = dayTasks.reduce((acc, t) => acc + (Number(t.prioridad) || 0), 0);
+          const pCompletado = dayTasks.reduce((acc, t) => {
+            const isExecuted = t.estado_ejecucion && EXECUTED_STATUSES.includes(t.estado_ejecucion);
+            return acc + (isExecuted ? (Number(t.prioridad) || 0) : 0);
+          }, 0);
+          
+          const iRes = await fetch(`/api/incidencias?fecha=${dStr}`);
+          const dayInc: any[] = await iRes.json();
+          const opMins = dayInc.reduce((acc, inc) => {
+            const [h1, m1] = inc.hora_inicio.split(':').map(Number);
+            const [h2, m2] = inc.hora_fin.split(':').map(Number);
+            return acc + ((h2 * 60 + m2) - (h1 * 60 + m1));
+          }, 0);
+
+          return {
+            percentage: pTotal > 0 ? (pCompletado / pTotal) * 100 : 0,
+            opMins
+          };
+        })
+      );
+
+      const avgStrat = historyData.reduce((acc, h) => acc + h.percentage, 0) / 7;
+      const totalOpMins = historyData.reduce((acc, h) => acc + h.opMins, 0);
+      
+      setWeeklyTrend(historyData.map((h, i) => ({ day: last7Days[i], percentage: h.percentage })));
+      setWeeklyOperativo({ 
+        avgPercentage: Math.round(avgStrat), 
+        totalMinutes: totalOpMins 
+      });
+      setReincidenciaPattern(avgStrat > 70 ? 'green' : avgStrat > 40 ? 'yellow' : 'red');
+
+    } catch (error) {
+      console.error("Error fetching integrated dashboard data:", error);
     } finally {
       setLoading(false);
     }
@@ -132,16 +377,6 @@ export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) =
   };
 
   const updateTask = async (id: number, updates: Partial<Task>) => {
-    // Irreversible execution check:
-    // If execution started, don't allow unmarking a completed task
-    if (isExecutionStarted && updates.completada === false) {
-      const task = tasks.find(t => t.id === id);
-      if (task?.completada) {
-        window.alert?.("La ejecución ya ha sido iniciada. No es posible desmarcar tareas completadas.");
-        return;
-      }
-    }
-
     const res = await fetch(`/api/tareas/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -160,12 +395,22 @@ export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) =
   const handleFinishDay = async () => {
     console.log('Finalizando día para:', selectedDate, 'Tareas:', tasks.length);
     
-    const noRealizadoWithoutJustification = tasks.filter(t => 
-      (t.estado_ejecucion === 'no realizado' || !t.estado_ejecucion) && (!t.justificacion || t.justificacion.trim() === "")
-    );
+    const missingInfo = tasks.filter(t => {
+      const status = t.estado_ejecucion || 'en espera';
+      
+      // Regla 1: Hallazgos obligatorios para Espera, Curso, Estudio, Listo
+      const needsHallazgos = ['en espera', 'en curso', 'en estudio', 'terminada'].includes(status);
+      if (needsHallazgos && (!t.hallazgos || t.hallazgos.trim() === "")) return true;
 
-    if (noRealizadoWithoutJustification.length > 0) {
-      setErrorCierre(`Falta justificación en ${noRealizadoWithoutJustification.length} tarea(s) sin estatus o marcadas como 'no realizado'.`);
+      // Regla 2: Justificación obligatoria para Despriorizado y Fallo
+      const needsJustificacion = ['despriorizada', 'no realizado'].includes(status);
+      if (needsJustificacion && (!t.justificacion || t.justificacion.trim() === "")) return true;
+
+      return false;
+    });
+
+    if (missingInfo.length > 0) {
+      setErrorCierre(`Falta información obligatoria (Hallazgos o Justificación) en ${missingInfo.length} tarea(s).`);
       return;
     }
 
@@ -219,9 +464,10 @@ export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) =
 
   // Resumen por nivel
   const stats = {
-    criticas: { total: 0, done: 0 },
-    altas: { total: 0, done: 0 },
-    medias: { total: 0, done: 0 },
+    criticas: { done: 0, total: 0 },
+    altas: { done: 0, total: 0 },
+    medias: { done: 0, total: 0 },
+    operativos: { total: bloques.length }
   };
 
   tasks.forEach(t => {
@@ -275,6 +521,15 @@ export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) =
     return `${hPart} ${mPart}`.trim();
   };
 
+  const getLecturaSemanal = () => {
+    const avg = weeklyOperativo.avgPercentage;
+    if (avg >= 80) return { text: "Semana con alta disciplina.", color: "text-[#7DA81A]", bg: "bg-[#7DA81A]/5", icon: <CheckCircle size={18} />, status: "green" };
+    if (avg >= 50) return { text: "Semana con riesgo estratégico.", color: "text-amber-600", bg: "bg-amber-50", icon: <AlertTriangle size={18} />, status: "yellow" };
+    return { text: "Semana crítica. Baja ejecución.", color: "text-accent", bg: "bg-accent/5", icon: <Zap size={18} />, status: "red" };
+  };
+
+  const lecturaSemanal = getLecturaSemanal();
+
   let strategicStatus = { 
     text: "En progreso estratégico", 
     color: "text-amber-600", 
@@ -309,328 +564,254 @@ export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) =
     };
   }
 
+  // --- Cálculo de Distribución Operativa ---
+  const bloquesDist = bloques.reduce((acc: Record<string, number>, b) => {
+    const [h1, m1] = b.hora_inicio.split(':').map(Number);
+    const [h2, m2] = b.hora_fin.split(':').map(Number);
+    const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+    acc[b.tipo] = (acc[b.tipo] || 0) + mins;
+    return acc;
+  }, {});
+
   return (
-    <div className="space-y-6">
-      {isClosed && (
-        <div className="bg-[#7DA81A]/10 border border-[#7DA81A]/20 text-[#7DA81A] px-6 py-4 rounded-2xl flex items-center shadow-sm">
-          <CheckCircle2 size={24} className="mr-3" />
-          <span className="font-bold">Día cerrado correctamente. Todas las actividades han sido registradas.</span>
-        </div>
-      )}
+    <div className="space-y-8 pb-20">
+      {/* Header con Distribución de Tiempos */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+        <div className="flex flex-col md:flex-row md:items-center gap-8">
+           <div className="flex items-center gap-4">
+              <div className="p-3 bg-primary/10 rounded-2xl text-primary">
+                 <CalendarIcon size={24} />
+              </div>
+              <div>
+                 <h1 className="text-2xl font-black text-slate-800 tracking-tight leading-none mb-1">Agenda de Operaciones</h1>
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {new Date(selectedDate).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                 </p>
+              </div>
+           </div>
 
-      {!isClosed && isExecutionStarted && (
-        <div className="bg-primary/5 border border-primary/20 text-primary px-6 py-4 rounded-2xl flex items-center shadow-sm">
-          <Clock size={24} className="mr-3" />
-          <span className="font-bold">
-            Ejecución iniciada a las {plan?.hora_inicio_ejecucion && !isNaN(Date.parse(plan.hora_inicio_ejecucion))
-              ? new Date(plan.hora_inicio_ejecucion).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-              : plan?.hora_inicio_ejecucion}.
-          </span>
+           {/* Cuadro de Distribución Resumen */}
+           <div className="flex flex-wrap gap-3 p-1">
+              {Object.entries(bloquesDist).map(([tipo, mins]) => (
+                <div key={tipo} className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-slate-100 shadow-sm transition-all hover:shadow-md hover:scale-105">
+                   <div className={`w-2 h-2 rounded-full ${
+                     tipo === 'Almuerzo' ? 'bg-amber-400' : 
+                     tipo === 'Reunión' ? 'bg-blue-400' : 
+                     tipo === 'Centro de Módulo' ? 'bg-purple-400' : 'bg-slate-400'
+                   }`} />
+                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{tipo}</span>
+                   <span className="text-xs font-black text-slate-700">{formatTime(mins)}</span>
+                </div>
+              ))}
+           </div>
         </div>
-      )}
-
-      {!isClosed && !isExecutionStarted && tasks.length > 0 && tasks.some(t => t.hora_inicio_plan) && (
-        <div className="bg-[#7DA81A]/5 border border-[#7DA81A]/20 text-[#7DA81A] px-6 py-4 rounded-2xl flex items-center shadow-sm">
-          <CheckCircle2 size={24} className="mr-3" />
-          <span className="font-bold">Agenda estratégica generada. Listo para iniciar ejecución.</span>
-        </div>
-      )}
-
-      <div className="latam-card !p-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center text-text-muted">
-            <CalendarIcon size={20} className="mr-2" />
-            <span className="font-medium">Seleccionar Fecha:</span>
+        
+        <div className="flex items-center gap-4 bg-white p-2 rounded-[24px] border border-slate-100 shadow-xl shadow-slate-200/50">
+          <div className="flex items-center text-slate-400 px-3">
+            <CalendarIcon size={18} className="mr-2" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Cambiar Fecha:</span>
           </div>
           <input 
             type="date" 
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="p-2 rounded-lg border border-border-soft outline-none focus:ring-2 focus:ring-primary transition-all hover:border-primary/30"
+            className="p-3 rounded-xl border-none outline-none focus:ring-0 text-sm font-black text-slate-700 bg-slate-50"
           />
         </div>
       </div>
 
-      {/* Bloque de Estado Estratégico */}
-      {tasks.length > 0 && (
-        <div className="latam-card !p-8">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider">Estado Estratégico del Día</h3>
-            <div className={`px-4 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border ${strategicStatus.bg} ${strategicStatus.color} ${strategicStatus.color.replace('text', 'border').replace('600', '200')}`}>
-              {porcentajeEstrategico}% Ejecutado
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-baseline gap-2">
-              <span className="text-5xl font-black text-text-strong">{porcentajeEstrategico}%</span>
-              <span className="text-sm font-bold text-text-muted uppercase tracking-wider">ejecutado</span>
-              <span className="ml-auto text-xl font-bold text-text-muted">{100 - porcentajeEstrategico}% pendiente</span>
-            </div>
-
-            {/* Resumen por nivel */}
-            <div className="flex flex-wrap gap-x-6 gap-y-2 py-2 border-y border-border-soft/50">
-              {stats.criticas.total > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Críticas:</span>
-                  <span className={`text-xs font-bold ${stats.criticas.done === stats.criticas.total ? 'text-[#7DA81A]' : 'text-accent'}`}>
-                    {stats.criticas.done} / {stats.criticas.total}
-                  </span>
-                </div>
-              )}
-              {stats.altas.total > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Altas:</span>
-                  <span className="text-xs font-bold text-text-strong">
-                    {stats.altas.done} / {stats.altas.total}
-                  </span>
-                </div>
-              )}
-              {stats.medias.total > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Medias:</span>
-                  <span className="text-xs font-bold text-text-strong">
-                    {stats.medias.done} / {stats.medias.total}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="w-full bg-bg-main h-3 rounded-full overflow-hidden flex shadow-inner">
-              <div 
-                className={`${strategicStatus.bar} bar-glow h-full transition-all duration-700 ease-out`}
-                style={{ width: `${animate ? porcentajeEstrategico : 0}%` }}
-              />
-            </div>
-
-            <p className={`text-sm font-bold ${strategicStatus.color} italic flex items-center`}>
-              <span className="mr-2 text-base leading-none">{strategicStatus.icon}</span>
-              {strategicStatus.text}
-            </p>
-          </div>
+      {isClosed && (
+        <div className="bg-[#7DA81A]/10 border border-[#7DA81A]/20 text-[#7DA81A] px-6 py-4 rounded-[24px] flex items-center shadow-sm">
+          <CheckCircle2 size={24} className="mr-3" />
+          <span className="font-bold">Día cerrado correctamente. Todas las actividades han sido registradas.</span>
         </div>
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-[#a8a29e]">Cargando agenda...</div>
-      ) : tasks.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-[#e7e5e4] p-12 text-center text-[#a8a29e]">
-          No hay tareas planificadas para esta fecha.
+        <div className="text-center py-20">
+           <Loader2 className="animate-spin mx-auto text-primary mb-4" size={40} />
+           <p className="text-slate-400 font-black text-xs uppercase tracking-widest">Cargando Plan de Operaciones...</p>
         </div>
       ) : (
-        <div className="space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {(() => {
-            const getFirstTime = (timeStr: string | undefined) => {
-              if (!timeStr) return '99:99';
-              try {
-                const parsed = JSON.parse(timeStr);
-                if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
-              } catch (e) {}
-              return timeStr;
-            };
+        <div className="space-y-10">
+          {/* Resumen Estratégico Compacto */}
+          <div className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-2xl shadow-slate-200/40 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-6">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Impacto Estratégico</span>
+                <span className="text-4xl font-black text-primary">{porcentajeEstrategico}%</span>
+              </div>
+              <div className="h-10 w-px bg-slate-100 hidden md:block" />
+              <div className="flex gap-4">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Críticas</span>
+                  <span className="text-sm font-black text-slate-700">{stats.criticas.done}/{stats.criticas.total}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Altas</span>
+                  <span className="text-sm font-black text-slate-700">{stats.altas.done}/{stats.altas.total}</span>
+                </div>
+              </div>
+            </div>
 
-            const orderedTasks = [...tasks].sort((a, b) => {
-              const timeA = getFirstTime(a.hora_inicio_plan);
-              const timeB = getFirstTime(b.hora_inicio_plan);
-              return timeA.localeCompare(timeB);
-            });
-            return orderedTasks.map((task) => (
-              <div 
-                key={task.id} 
-                onClick={() => setExpandedTaskId(task.id)}
-                className={`latam-card min-h-[220px] flex flex-col cursor-pointer transition-all duration-300 relative hover:-translate-y-1 hover:shadow-xl ${
-                  task.estado_ejecucion === 'terminada' ? 'border-emerald-200 bg-emerald-50/30' : 
-                  task.estado_ejecucion === 'no realizado' ? 'border-red-100 bg-red-50/20' : 
-                  task.estado_ejecucion === 'en curso' ? 'border-primary ring-2 ring-primary/20 shadow-lg shadow-primary/10' : ''
+            <div className="flex-1 max-w-md w-full">
+               <div className="w-full bg-slate-50 h-3 rounded-full overflow-hidden flex p-0.5 shadow-inner">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${porcentajeEstrategico}%` }}
+                    className={`${strategicStatus.bar} h-full rounded-full bar-glow`}
+                  />
+               </div>
+               <p className={`text-[10px] font-black mt-2 ${strategicStatus.color} uppercase tracking-widest flex items-center gap-2`}>
+                  {strategicStatus.icon} {strategicStatus.text}
+               </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowIncidentModal(true)}
+                className="flex items-center gap-2 px-6 py-3.5 bg-amber-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg shadow-amber-100"
+              >
+                <PlusCircle size={18} />
+                Registrar No Planificada
+              </button>
+              <button 
+                onClick={handleFinishDay}
+                disabled={isClosing || isClosed}
+                className={`flex items-center gap-2 px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg ${
+                  isClosed 
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                    : 'bg-slate-900 text-white hover:bg-black'
                 }`}
               >
-                <div className="flex items-start gap-4 mb-6">
-                  <div className={`transition-colors mt-1 ${task.estado_ejecucion === 'terminada' ? 'text-[#7DA81A]' : 'text-border-soft'}`}>
-                    {task.estado_ejecucion === 'terminada' ? <CheckCircle2 size={32} /> : <Circle size={32} />}
-                  </div>
-                  
-                  <div className="flex-1 space-y-4">
-                    {/* Status removed from here, moved to modal */}
-                    <div className="flex items-center gap-4">
-                      <span className={`text-[11px] font-bold px-3 py-1 rounded border shadow-sm ${getPriorityInfo(task.prioridad).color}`}>
-                        {getPriorityInfo(task.prioridad).label}
-                      </span>
-                      {task.area && (
-                        <span className="text-[11px] font-bold px-3 py-1 rounded border shadow-sm bg-primary/5 text-primary border-primary/10 uppercase">
-                          {task.area}
-                        </span>
-                      )}
-                      {task.hora_inicio_plan && (() => {
-                        try {
-                          const starts = JSON.parse(task.hora_inicio_plan);
-                          const ends = task.hora_fin_plan ? JSON.parse(task.hora_fin_plan) : null;
-                          if (Array.isArray(starts) && Array.isArray(ends)) {
-                            return (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                {starts.map((start, idx) => (
-                                  <div key={idx} className="flex items-center">
-                                    <Clock size={14} className="mr-2 text-text-muted" />
-                                    <span className="text-sm font-bold text-text-strong">
-                                      {start} – {ends[idx]}
-                                    </span>
-                                    {idx < starts.length - 1 && (
-                                      <span className="ml-4 text-border-soft">|</span>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          }
-                        } catch (e) {}
-                        return (
-                          <div className="flex items-center">
-                            <Clock size={14} className="mr-2 text-text-muted" />
-                            <span className="text-sm font-bold text-text-strong">
-                              {task.hora_inicio_plan}{task.hora_fin_plan ? ` – ${task.hora_fin_plan}` : ''}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Line 3: Activity */}
-                    <div className="flex-1 mt-4">
-                      <h4 className={`text-xl md:text-2xl font-bold leading-tight line-clamp-3 ${task.estado_ejecucion === 'terminada' ? 'line-through text-text-muted opacity-70' : 'text-primary'}`}>
-                        {task.actividad}
-                      </h4>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
-                   <span className="text-[10px] font-bold text-text-muted uppercase">Estado Actual:</span>
-                   <span className="text-[10px] font-black uppercase tracking-widest text-primary">{task.estado_ejecucion || 'PENDIENTE'}</span>
-                </div>
-              </div>
-            ));
-          })()}
-        </div>
-
-          {showUnplannedWarning && (
-            <div className="mt-6 p-4 rounded-xl bg-amber-50/50 border border-amber-100/50 flex items-center text-amber-700/80">
-              <span className="mr-2 text-lg">🟡</span>
-              <span className="text-sm font-bold">
-                Tiempo disponible sin planificar: {formatTime(roundedUnplanned)}
-              </span>
+                {isClosing ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                {isClosed ? 'Día Finalizado' : 'Finalizar Día'}
+              </button>
             </div>
-          )}
+          </div>
 
-          {incidencias.length > 0 && (
-            <div className="mt-12 pt-8 border-t border-border-soft">
-              <h3 className="text-sm font-bold text-text-muted uppercase mb-6 flex items-center tracking-wider">
-                <AlertTriangle size={16} className="mr-2 text-[#FFC700]" />
-                Actividades No Planificadas del Día
-              </h3>
-              <div className="space-y-4">
-                {incidencias.map((inc) => (
-                  <div key={inc.id} className="latam-card !p-5 flex items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center text-sm font-bold text-primary">
-                          <Clock size={14} className="mr-2 text-text-muted" />
-                          {inc.hora_inicio} – {inc.hora_fin}
-                        </div>
-                        <span className="text-[10px] font-bold text-text-muted bg-bg-main border border-border-soft px-2 py-1 rounded-lg uppercase tracking-widest">
-                          {inc.tipo}
-                        </span>
-                      </div>
-                      <p className="text-sm text-text-strong leading-relaxed">{inc.descripcion}</p>
-                    </div>
-                  </div>
+          {/* Grid de Tareas e Incidencias */}
+          {tasks.length === 0 ? (
+            <div className="bg-white rounded-[40px] border border-slate-100 p-20 text-center shadow-xl shadow-slate-100/50">
+              <p className="text-slate-400 font-black text-xs uppercase tracking-widest">No hay tareas para esta fecha.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {incidencias.map((inc, idx) => (
+                <IncidentCard key={`inc-${idx}`} incident={inc} />
+              ))}
+              {[...tasks]
+                .sort((a, b) => (b.prioridad || 0) - (a.prioridad || 0))
+                .map((task) => (
+                  <TaskCard 
+                    key={task.id} 
+                    task={task} 
+                    isClosed={isClosed} 
+                    updateTask={updateTask}
+                    getFirstTime={getFirstTime}
+                    onOpenDetails={(t) => setEditingTask(t)}
+                  />
                 ))}
-              </div>
             </div>
           )}
 
-          {tasks.length > 0 && !isClosed && (
-            <div className="pt-6 space-y-6">
-              {errorCierre && (
-                <div className="bg-accent/10 border border-accent/20 text-accent px-6 py-4 rounded-2xl flex items-center shadow-sm">
-                  <AlertTriangle size={20} className="mr-2" />
-                  <span className="font-bold">{errorCierre}</span>
+          {/* Panel de Cierre de Jornada (Resumen Consolidado) */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mt-16 bg-slate-900 rounded-[48px] p-12 text-white shadow-3xl shadow-slate-300 relative overflow-hidden"
+          >
+            {/* Fondo decorativo Pro */}
+            <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -mr-48 -mt-48" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl -ml-32 -mb-32" />
+
+            <div className="relative z-10">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
+                <div className="flex items-center gap-5">
+                  <div className="p-4 bg-white/10 rounded-3xl backdrop-blur-md">
+                    <BarChart3 size={32} className="text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-3xl font-black tracking-tight leading-tight">Cierre de Jornada</h3>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Bitácora Detallada de Ejecución</p>
+                  </div>
                 </div>
-              )}
-              <div className="flex justify-between items-center">
-                <button 
-                  onClick={() => setShowIncidentModal(true)}
-                  className="flex items-center bg-amber-500 text-white px-6 py-4 rounded-xl font-bold hover:bg-amber-600 hover:scale-105 hover:shadow-xl transition-all duration-300 shadow-lg shadow-amber-100"
-                >
-                  <PlusCircle size={20} className="mr-2" />
-                  Registrar Actividad No Planificada
-                </button>
-                
-                <button 
-                  onClick={handleFinishDay}
-                  disabled={isClosing}
-                  className="latam-btn-primary px-10 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {isClosing ? (
-                    <>
-                      <Loader2 size={20} className="animate-spin" />
-                      Finalizando...
-                    </>
-                  ) : (
-                    'Finalizar Día'
-                  )}
-                </button>
+                <div className="flex gap-4">
+                   <div className="px-6 py-3 bg-[#7DA81A]/10 border border-[#7DA81A]/20 rounded-2xl">
+                      <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Resumen de Impacto</p>
+                      <p className="text-sm font-black text-[#7DA81A] uppercase tracking-widest flex items-center gap-2 mt-1">
+                         <CheckCircle2 size={14} /> {porcentajeEstrategico}% LOGRADO
+                      </p>
+                   </div>
+                </div>
+              </div>
+
+              {/* Bitácora Detallada tipo Excel */}
+              <div className="space-y-6">
+                 <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                    <h4 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Bitácora Detallada de Ejecución</h4>
+                    <div className="px-4 py-1.5 bg-white/5 rounded-full border border-white/10 text-[9px] font-black text-slate-500">
+                       EXPORTACIÓN VISUAL
+                    </div>
+                 </div>
+                 
+                 <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                       <thead>
+                          <tr className="border-b border-white/5">
+                             <th className="py-4 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Actividad</th>
+                             <th className="py-4 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Impacto</th>
+                             <th className="py-4 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Estado</th>
+                             <th className="py-4 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Hallazgos y Aprendizajes</th>
+                             <th className="py-4 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Justificación de Desviación</th>
+                          </tr>
+                       </thead>
+                       <tbody>
+                          {tasks.map((task) => (
+                             <tr key={task.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
+                                <td className="py-5 px-4">
+                                   <p className="text-xs font-black text-white group-hover:text-amber-400 transition-colors">{task.actividad}</p>
+                                   <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">ID: #{task.id}</p>
+                                </td>
+                                <td className="py-5 px-4 text-center">
+                                   <span className={`text-[9px] font-black px-2 py-1 rounded-md ${
+                                      task.prioridad >= 10 ? 'bg-red-500/10 text-red-500' :
+                                      task.prioridad >= 7 ? 'bg-amber-500/10 text-amber-500' :
+                                      'bg-slate-500/10 text-slate-400'
+                                   }`}>
+                                      {task.prioridad >= 10 ? 'CRÍTICA' : task.prioridad >= 7 ? 'ALTA' : 'MEDIA'}
+                                   </span>
+                                </td>
+                                <td className="py-5 px-4 text-center">
+                                   <span className={`text-[9px] font-black px-2 py-1 rounded-md ${
+                                      task.estado_ejecucion === 'terminada' ? 'bg-[#7DA81A]/20 text-[#7DA81A]' :
+                                      task.estado_ejecucion === 'despriorizada' ? 'bg-amber-500/20 text-amber-500' :
+                                      'bg-slate-500/20 text-slate-400'
+                                   }`}>
+                                      {task.estado_ejecucion?.toUpperCase() || 'PENDIENTE'}
+                                   </span>
+                                </td>
+                                <td className="py-5 px-4">
+                                   <p className="text-[11px] font-medium text-slate-300 leading-relaxed max-w-xs italic">
+                                      {task.hallazgos ? `"${task.hallazgos}"` : <span className="text-slate-600 opacity-50">— Sin comentarios —</span>}
+                                   </p>
+                                </td>
+                                <td className="py-5 px-4">
+                                   <p className="text-[11px] font-medium text-amber-500/80 leading-relaxed max-w-xs italic">
+                                      {task.justificacion ? `"${task.justificacion}"` : <span className="text-slate-600 opacity-50">— N/A —</span>}
+                                   </p>
+                                </td>
+                             </tr>
+                          ))}
+                       </tbody>
+                    </table>
+                 </div>
               </div>
             </div>
-          )}
+          </motion.div>
         </div>
       )}
-
-      {/* MOCKUP VISUAL DE PLANIFICACIÓN BAJA (A PETICIÓN DEL USUARIO) */}
-      <div className="mt-12 pt-12 border-t border-slate-200">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Prueba Visual: Integración de Planificación (Backlog)</h3>
-        
-        <div className="flex gap-4 items-stretch group/lane">
-          {/* Etiqueta Lateral de Prioridad */}
-          <div className="w-14 rounded-3xl flex items-center justify-center shadow-lg transition-all text-slate-700" style={{ backgroundColor: '#f1f5f9' }}>
-            <div className="flex flex-col items-center gap-2 py-4">
-              <span className="text-[9px] font-black text-slate-400 bg-white/50 px-2 py-0.5 rounded-full mb-4">
-                3
-              </span>
-              <h5 className="text-[11px] font-black uppercase tracking-[0.3em] -rotate-180 [writing-mode:vertical-lr] whitespace-nowrap drop-shadow-sm">
-                BAJA
-              </h5>
-            </div>
-          </div>
-
-          {/* Contenedor Horizontal de Tareas */}
-          <div className="flex-1 flex gap-4 overflow-x-auto pb-4 pt-1 px-1 custom-scrollbar snap-x">
-            {[1, 2, 3].map(i => (
-              <div 
-                key={i} 
-                className="min-w-[300px] max-w-[300px] bg-white p-5 rounded-3xl border border-slate-200 shadow-sm transition-all relative cursor-pointer snap-start opacity-70 hover:opacity-100 grayscale hover:grayscale-0"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-[7px] font-black text-slate-300 uppercase tracking-widest">#{23 + i}</span>
-                  <span className="text-[7px] font-black bg-slate-50 text-slate-400 px-2 py-0.5 rounded-full uppercase">GENERAL</span>
-                </div>
-                
-                <div className="flex items-start gap-3 mb-6 min-h-[40px]">
-                  <p className="text-[11px] font-black text-slate-700 uppercase tracking-tight leading-snug">
-                    {i === 3 ? 'NUEVA ACTIVIDAD' : 'ACTUALIZACIÓN DE DASHBOARD DE CALIDAD'}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                  <div className="flex flex-col">
-                    <span className="text-[6px] font-black text-slate-300 uppercase tracking-tighter">Registrado</span>
-                    <span className="text-[9px] font-bold text-slate-400">13/5/2026</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
       {/* Incident Modal */}
       {showIncidentModal && (
@@ -642,7 +823,6 @@ export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) =
                 <X size={24} />
               </button>
             </div>
-            
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-[#78716c] uppercase mb-2">Tipo de Actividad</label>
@@ -657,7 +837,6 @@ export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) =
                   <option value="Otro">Otro</option>
                 </select>
               </div>
-              
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-[#78716c] uppercase mb-2">Hora Inicio</label>
@@ -678,7 +857,6 @@ export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) =
                   />
                 </div>
               </div>
-              
               <div>
                 <label className="block text-xs font-bold text-[#78716c] uppercase mb-2">Descripción</label>
                 <textarea 
@@ -689,113 +867,71 @@ export default function AgendaView2({ onNavigate }: { onNavigate?: (view: any) =
                 />
               </div>
             </div>
-            
             <div className="p-6 bg-bg-main flex gap-3">
-              <button 
-                onClick={() => setShowIncidentModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl font-bold text-text-muted hover:bg-border-soft transition-all duration-300 hover:scale-105"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleSaveIncident}
-                className="flex-1 px-6 py-3 rounded-xl font-bold text-white bg-amber-500 hover:bg-amber-600 transition-all duration-300 hover:scale-105 shadow-lg shadow-amber-100"
-              >
-                Guardar Actividad
-              </button>
+              <button onClick={() => setShowIncidentModal(false)} className="flex-1 px-6 py-3 rounded-xl font-bold text-text-muted hover:bg-border-soft transition-all duration-300 hover:scale-105">Cancelar</button>
+              <button onClick={handleSaveIncident} className="flex-1 px-6 py-3 rounded-xl font-bold text-white bg-amber-500 hover:bg-amber-600 transition-all duration-300 hover:scale-105 shadow-lg shadow-amber-100">Guardar Actividad</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DE TAREA EXPANDIDA */}
-      {expandedTaskId && tasks.find(t => t.id === expandedTaskId) && (() => {
-        const t = tasks.find(x => x.id === expandedTaskId)!;
-        return (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-              <div className="p-8 border-b border-slate-100 bg-slate-50 flex items-start justify-between">
-                <div>
-                  <span className={`text-[10px] font-bold px-3 py-1 rounded-full border shadow-sm ${getPriorityInfo(t.prioridad).color}`}>
-                    {getPriorityInfo(t.prioridad).label}
-                  </span>
-                  <h3 className="text-2xl font-black text-slate-800 mt-4 leading-tight">{t.actividad}</h3>
+      {/* Modal de Detalles de Tarea */}
+      {editingTask && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100">
+            <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase text-white ${getPriorityInfo(editingTask.prioridad).color}`}>{getPriorityInfo(editingTask.prioridad).label}</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{editingTask.area || 'GENERAL'}</span>
                 </div>
-                <button onClick={() => setExpandedTaskId(null)} className="p-2 bg-white rounded-full text-slate-400 hover:text-slate-800 shadow-sm border border-slate-100 transition-all">
-                  <X size={20} />
-                </button>
+                <h3 className="text-2xl font-black text-slate-800 leading-tight">{editingTask.actividad}</h3>
               </div>
-              
-              <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-8">
-                {/* Status Selection */}
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Estado de Ejecución</label>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { id: 'en espera', label: 'ESPERA', color: 'bg-slate-100 text-slate-600 border-slate-200' },
-                      { id: 'en curso', label: 'EN CURSO', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-                      { id: 'en estudio', label: 'ESTUDIO', color: 'bg-purple-100 text-purple-700 border-purple-200' },
-                      { id: 'terminada', label: 'COMPLETADO', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-                      { id: 'despriorizada', label: 'DESPRIORIZADA', color: 'bg-amber-100 text-amber-700 border-amber-200' },
-                      { id: 'no realizado', label: 'NO REALIZADO', color: 'bg-red-100 text-red-700 border-red-200' },
-                    ].map((state) => (
-                      <button
-                        key={state.id}
-                        disabled={isClosed}
-                        onClick={() => {
-                          const isDone = state.id === 'terminada';
-                          updateTask(t.id, { estado_ejecucion: state.id, completada: isDone });
-                        }}
-                        className={`text-[11px] font-black uppercase tracking-wider px-4 py-3 rounded-xl border-2 transition-all cursor-pointer disabled:cursor-not-allowed flex-1 min-w-[120px] ${
-                          t.estado_ejecucion === state.id 
-                            ? `${state.color} border-current shadow-md scale-105` 
-                            : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        {state.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Hallazgos Relevantes</label>
-                    <textarea 
-                      disabled={isClosed}
-                      value={t.hallazgos || ''}
-                      onChange={(e) => updateTask(t.id, { hallazgos: e.target.value })}
-                      placeholder="¿Qué descubriste durante la ejecución?"
-                      className="w-full p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 text-sm font-medium outline-none focus:border-primary focus:bg-white min-h-[120px] transition-all resize-none"
-                    />
-                  </div>
-                  <div>
-                    <label className={`block text-[10px] font-black tracking-widest uppercase mb-3 ${(t.estado_ejecucion === 'no realizado' || !t.estado_ejecucion) ? 'text-accent' : 'text-slate-400'}`}>
-                      Justificación {(t.estado_ejecucion === 'no realizado' || !t.estado_ejecucion) && '*'}
-                    </label>
-                    <textarea 
-                      disabled={isClosed}
-                      value={t.justificacion || ''}
-                      onChange={(e) => updateTask(t.id, { justificacion: e.target.value })}
-                      placeholder={t.estado_ejecucion === 'no realizado' ? "Obligatorio: ¿Por qué no se completó?" : "Opcional"}
-                      className={`w-full p-4 rounded-2xl border-2 text-sm font-medium outline-none min-h-[120px] transition-all resize-none ${
-                        (t.estado_ejecucion === 'no realizado' || !t.estado_ejecucion) && (!t.justificacion || t.justificacion.trim() === "")
-                          ? 'border-red-300 bg-red-50 focus:border-red-500' 
-                          : 'border-slate-100 bg-slate-50 focus:border-primary focus:bg-white'
-                      }`}
-                    />
-                  </div>
+              <button onClick={() => setEditingTask(null)} className="p-3 bg-white text-slate-400 hover:text-slate-800 rounded-2xl shadow-sm border border-slate-100 transition-all hover:scale-110"><X size={24} /></button>
+            </div>
+            <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Clock size={14} /> Estado de Ejecución</label>
+                <div className="flex bg-slate-100/50 p-1.5 rounded-2xl border border-slate-100 gap-1.5 flex-wrap">
+                  {[{ id: 'nuevo', label: 'NUEVO', color: 'bg-cyan-500' }, { id: 'abierto', label: 'ABIERTO', color: 'bg-purple-500' }, { id: 'pendiente', label: 'PENDIENTE', color: 'bg-blue-500' }, { id: 'en espera', label: 'EN ESPERA', color: 'bg-amber-500' }, { id: 'resuelto', label: 'RESUELTO', color: 'bg-emerald-500' }, { id: 'despriorizado', label: 'DESPRIORIZADO', color: 'bg-slate-500' }, { id: 'fallido', label: 'FALLIDO', color: 'bg-red-500' }].map((state) => (
+                    <button key={state.id} disabled={isClosed} onClick={() => { 
+                      const isDone = state.id === 'resuelto'; 
+                      let tInvertido = editingTask.tiempo_invertido_minutos;
+                      if (isDone) {
+                        const input = window.prompt('¿Cuánto tiempo real invertiste en esta tarea? (en minutos)', String(tInvertido || 30));
+                        if (input !== null) {
+                          tInvertido = parseInt(input, 10) || 30;
+                        }
+                      }
+                      updateTask(editingTask.id, { estado_ejecucion: state.id, completada: isDone, tiempo_invertido_minutos: tInvertido }); 
+                      setEditingTask({...editingTask, estado_ejecucion: state.id, completada: isDone, tiempo_invertido_minutos: tInvertido}); 
+                    }} className={`text-[9px] font-black px-4 py-2.5 rounded-xl transition-all ${editingTask.estado_ejecucion === state.id ? `${state.color} text-white shadow-lg scale-105 ring-2 ring-offset-2 ring-current/20` : 'bg-white text-slate-400 hover:text-slate-600 border border-slate-200/50'}`}>{state.label}</button>
+                  ))}
                 </div>
               </div>
-              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
-                <button onClick={() => setExpandedTaskId(null)} className="px-8 py-4 bg-primary text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-primary-soft shadow-lg shadow-primary/20 transition-all">
-                  Cerrar Detalles
-                </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-3">
+                  <label className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${(['en espera', 'en curso', 'en estudio', 'terminada'].includes(editingTask.estado_ejecucion || 'en espera') && !editingTask.hallazgos) ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}><Tag size={14} className={(['en espera', 'en curso', 'en estudio', 'terminada'].includes(editingTask.estado_ejecucion || 'en espera') && !editingTask.hallazgos) ? 'text-red-500' : 'text-primary'} /> Hallazgos y Aprendizajes</label>
+                  <textarea disabled={isClosed} value={editingTask.hallazgos || ''} onChange={(e) => { const val = e.target.value; setEditingTask({...editingTask, hallazgos: val}); updateTask(editingTask.id, { hallazgos: val }); }} placeholder="¿Qué descubriste hoy?" className={`w-full p-4 rounded-3xl border text-sm outline-none focus:ring-4 min-h-[140px] transition-all resize-none font-medium text-slate-700 ${(['en espera', 'en curso', 'en estudio', 'terminada'].includes(editingTask.estado_ejecucion || 'en espera') && !editingTask.hallazgos) ? 'border-red-200 bg-red-50/10 focus:ring-red-500/10' : 'border-slate-100 bg-slate-50/50 focus:ring-primary/10'}`} />
+                </div>
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><LinkIcon size={14} className="text-blue-500" /> Evidencias y Links</label>
+                    <input type="text" disabled={isClosed} value={editingTask.evidencia || ''} onChange={(e) => { const val = e.target.value; setEditingTask({...editingTask, evidencia: val}); updateTask(editingTask.id, { evidencia: val }); }} placeholder="Link o nombre de archivo..." className="w-full p-4 rounded-2xl border border-slate-100 bg-slate-50/50 text-sm outline-none focus:ring-4 focus:ring-blue-500/10 transition-all font-medium text-slate-700" />
+                  </div>
+                  <div className="space-y-3">
+                    <label className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${(['despriorizada', 'no realizado'].includes(editingTask.estado_ejecucion || 'en espera') && !editingTask.justificacion) ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}><AlertTriangle size={14} /> Justificación</label>
+                    <textarea disabled={isClosed} value={editingTask.justificacion || ''} onChange={(e) => { const val = e.target.value; setEditingTask({...editingTask, justificacion: val}); updateTask(editingTask.id, { justificacion: val }); }} placeholder="Obligatorio para despriorizados o fallos..." className={`w-full p-4 rounded-2xl border text-sm outline-none focus:ring-4 min-h-[100px] transition-all resize-none font-medium text-slate-700 ${(['despriorizada', 'no realizado'].includes(editingTask.estado_ejecucion || 'en espera') && !editingTask.justificacion) ? 'border-red-200 bg-red-50/10 focus:ring-red-500/10' : 'border-slate-100 bg-slate-50/50 focus:ring-primary/10'}`} />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })()}
+            <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-end">
+              <button onClick={() => setEditingTask(null)} className="px-8 py-3 bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-slate-200 hover:scale-105 active:scale-95">Cerrar y Guardar</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

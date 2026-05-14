@@ -25,10 +25,10 @@ const PRIORITIES = [
 
 const getDurationByPriority = (p: number) => {
   switch (p) {
-    case 10: return 120; // CRÍTICA
-    case 7: return 90;   // ALTA
-    case 4: return 45;   // MEDIA
-    case 2: return 15;   // BAJA
+    case 10: return 120; // CRÍTICA: 2h
+    case 7: return 90;   // ALTA: 1.5h
+    case 4: return 60;   // MEDIA: 1h
+    case 2: return 30;   // BAJA: 0.5h
     default: return 60;
   }
 };

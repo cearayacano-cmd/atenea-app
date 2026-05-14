@@ -47,7 +47,8 @@ db.exec(`
     fecha_origen_remanente TEXT,
     backlog_id INTEGER,
     evidencia TEXT,
-    area TEXT
+    area TEXT,
+    tiempo_invertido_minutos INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS Incidencias (
@@ -119,6 +120,9 @@ if (!columns.includes("estado_ejecucion")) {
 }
 if (!columns.includes("evidencia")) {
   db.exec("ALTER TABLE Tareas ADD COLUMN evidencia TEXT");
+}
+if (!columns.includes("tiempo_invertido_minutos")) {
+  db.exec("ALTER TABLE Tareas ADD COLUMN tiempo_invertido_minutos INTEGER DEFAULT 0");
 }
 
 const planInfo = db.prepare("PRAGMA table_info(PlanesDiarios)").all();
@@ -224,7 +228,7 @@ async function startServer() {
 
   app.put("/api/tareas/:id", (req, res) => {
     const { id } = req.params;
-    const { actividad, prioridad, completada, estado_ejecucion, hallazgos, justificacion, evidencia, hora_inicio_plan, hora_fin_plan, tiempo_asignado_minutos, area } = req.body;
+    const { actividad, prioridad, completada, estado_ejecucion, hallazgos, justificacion, evidencia, hora_inicio_plan, hora_fin_plan, tiempo_asignado_minutos, tiempo_invertido_minutos, area } = req.body;
 
     console.log(`Updating task ${id}:`, req.body);
 
@@ -258,6 +262,7 @@ async function startServer() {
     if (hora_inicio_plan !== undefined) { updates.push("hora_inicio_plan = ?"); params.push(hora_inicio_plan); }
     if (hora_fin_plan !== undefined) { updates.push("hora_fin_plan = ?"); params.push(hora_fin_plan); }
     if (tiempo_asignado_minutos !== undefined) { updates.push("tiempo_asignado_minutos = ?"); params.push(tiempo_asignado_minutos); }
+    if (tiempo_invertido_minutos !== undefined) { updates.push("tiempo_invertido_minutos = ?"); params.push(tiempo_invertido_minutos); }
     if (req.body.minutos_remanentes !== undefined) { updates.push("minutos_remanentes = ?"); params.push(req.body.minutos_remanentes); }
     if (req.body.fecha_origen_remanente !== undefined) { updates.push("fecha_origen_remanente = ?"); params.push(req.body.fecha_origen_remanente); }
 
@@ -283,6 +288,21 @@ async function startServer() {
       }
     }
 
+    res.json({ success: true });
+  });
+
+  app.delete("/api/tareas/clear", (req, res) => {
+    const { fecha } = req.query;
+    if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
+    
+    db.transaction(() => {
+      const tasksWithBacklog = db.prepare("SELECT backlog_id FROM Tareas WHERE fecha = ? AND backlog_id IS NOT NULL").all(fecha);
+      for (const t of tasksWithBacklog) {
+        db.prepare("UPDATE Backlog SET status = 'pendiente' WHERE id = ?").run(t.backlog_id);
+      }
+      db.prepare("DELETE FROM Tareas WHERE fecha = ?").run(fecha);
+    })();
+    
     res.json({ success: true });
   });
 
@@ -434,6 +454,11 @@ async function startServer() {
     res.json({ success: true });
   });
 
+
+  app.get("/api/planes-diarios", (req, res) => {
+    const plans = db.prepare("SELECT * FROM PlanesDiarios").all();
+    res.json(plans);
+  });
 
   app.get("/api/tareas/todas", (req, res) => {
     const tasks = db.prepare("SELECT * FROM Tareas ORDER BY fecha DESC, prioridad DESC").all();

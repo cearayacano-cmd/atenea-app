@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, Calendar, ListChecks, LayoutDashboard, Menu, X, History } from 'lucide-react';
+import { Settings, Calendar, ListChecks, LayoutDashboard, Menu, X, History, BarChart3, ListTodo } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import HomeView from './components/HomeView';
 import ConfigView from './components/ConfigView';
@@ -13,15 +13,18 @@ import PlanningView from './components/PlanningView';
 import AgendaView from './components/AgendaView';
 import AgendaView2 from './components/AgendaView2';
 import DashboardView from './components/DashboardView';
+import DashboardView2 from './components/DashboardView2';
 import BacklogView from './components/BacklogView';
 import HistoryView from './components/HistoryView';
+import HistoryView2 from './components/HistoryView2';
 
-type View = 'home' | 'config' | 'config2' | 'planning' | 'agenda' | 'agenda2' | 'dashboard' | 'backlog' | 'history';
+type View = 'home' | 'config' | 'config2' | 'planning' | 'agenda' | 'agenda2' | 'dashboard' | 'dashboard2' | 'backlog' | 'history' | 'history2';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<View>('config2');
+  const [currentView, setCurrentView] = useState<View>('agenda2');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [user, setUser] = useState({ name: 'Cargando...', email: '', initials: '...' });
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     fetch('/api/me')
@@ -31,12 +34,19 @@ export default function App() {
   }, []);
 
   const navItems = [
-    { id: 'config2', label: 'Centro de Módulo', icon: Settings },
+    // SECCIÓN CLÁSICA (ANTES)
+    { id: 'dashboard', label: 'Dashboard v1', icon: BarChart3 },
     { id: 'planning', label: 'Planificación Clásica', icon: Calendar },
-    { id: 'agenda', label: 'Agenda del Día 1', icon: ListChecks },
-    { id: 'agenda2', label: 'Agenda del Día 2', icon: ListChecks },
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'history', label: 'Historial', icon: History },
+    { id: 'agenda', label: 'Agenda del Día 1', icon: ListTodo },
+    { id: 'history', label: 'Historial v1', icon: History },
+    
+    { id: 'divider', label: '', icon: null, isDivider: true },
+
+    // SECCIÓN PRO (DESPUÉS)
+    { id: 'config2', label: 'Centro de Módulo', icon: Settings },
+    { id: 'agenda2', label: 'Agenda Pro (v2)', icon: ListTodo },
+    { id: 'dashboard2', label: 'Dashboard Pro (v2)', icon: BarChart3 },
+    { id: 'history2', label: 'Historial Pro (v2)', icon: History },
   ];
 
   return (
@@ -71,26 +81,33 @@ export default function App() {
             </div>
 
             <nav className="flex-1 px-4 space-y-2">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setCurrentView(item.id as View)}
-                  className={`w-full flex items-center p-3 rounded-xl transition-all duration-300 relative group ${
-                    currentView === item.id 
-                      ? 'bg-primary-soft text-white shadow-lg scale-[1.02]' 
-                      : 'text-white/60 hover:bg-primary-soft/50 hover:text-white hover:scale-[1.02]'
-                  }`}
-                >
-                  {currentView === item.id && (
-                    <motion.div 
-                      layoutId="active-indicator"
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-accent rounded-r-full"
-                    />
-                  )}
-                  <item.icon size={20} className={`${isSidebarOpen ? 'mr-3' : 'mx-auto'} transition-transform duration-300 group-hover:scale-110`} />
-                  {isSidebarOpen && <span className="font-medium">{item.label}</span>}
-                </button>
-              ))}
+              {navItems.map((item, idx) => {
+                if (item.isDivider) {
+                  return <div key={`divider-${idx}`} className="my-6 border-t border-white/10 mx-2" />;
+                }
+                const Icon = item.icon;
+                if (!Icon) return null; // Seguridad extra
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setCurrentView(item.id as View)}
+                    className={`w-full flex items-center p-3 rounded-xl transition-all duration-300 relative group ${
+                      currentView === item.id 
+                        ? 'bg-white/10 text-white shadow-lg scale-[1.02]' 
+                        : 'text-white/60 hover:bg-white/5 hover:text-white hover:scale-[1.02]'
+                    }`}
+                  >
+                    {currentView === item.id && (
+                      <motion.div 
+                        layoutId="active-indicator"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#99CC33] rounded-r-full"
+                      />
+                    )}
+                    <Icon size={20} className={`${isSidebarOpen ? 'mr-3' : 'mx-auto'} transition-transform duration-300 group-hover:scale-110`} />
+                    {isSidebarOpen && <span className="font-medium">{item.label}</span>}
+                  </button>
+                );
+              })}
             </nav>
 
             <div className="p-6 border-t border-white/10">
@@ -130,9 +147,11 @@ export default function App() {
                   {currentView === 'backlog' && <BacklogView />}
                   {currentView === 'planning' && <PlanningView onNavigate={(v) => setCurrentView(v as View)} />}
                   {currentView === 'agenda' && <AgendaView onNavigate={(v) => setCurrentView(v as View)} />}
-                  {currentView === 'agenda2' && <AgendaView2 onNavigate={(v) => setCurrentView(v as View)} />}
+                  {currentView === 'agenda2' && <AgendaView2 onNavigate={(v) => setCurrentView(v as View)} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />}
                   {currentView === 'history' && <HistoryView />}
+                  {currentView === 'history2' && <HistoryView2 />}
                   {currentView === 'dashboard' && <DashboardView />}
+                  {currentView === 'dashboard2' && <DashboardView2 selectedDate={selectedDate} setSelectedDate={setSelectedDate} />}
                 </motion.div>
               </AnimatePresence>
             </div>

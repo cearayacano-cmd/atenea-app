@@ -37,8 +37,9 @@ export default function ConfigView2() {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Bloques
+  // Bloques y Jornadas
   const [bloques, setBloques] = useState<Bloque[]>([]);
+  const [dailyPlans, setDailyPlans] = useState<Record<string, any>>({});
   const [newBlock, setNewBlock] = useState({ isRecurrente: false, dias: [] as string[], fecha: new Date().toISOString().split('T')[0], inicio: '13:00', fin: '14:00', tipo: 'Almuerzo' });
 
   // Backlog
@@ -54,7 +55,58 @@ export default function ConfigView2() {
   const [isPlanningModalOpen, setIsPlanningModalOpen] = useState(false);
   const [selectedPlanningDate, setSelectedPlanningDate] = useState('');
   const [dayTasks, setDayTasks] = useState<any[]>([]);
+  const [pendingSuggestions, setPendingSuggestions] = useState<any[]>([]);
   const [editingTask, setEditingTask] = useState<Partial<BacklogItem> | null>(null);
+
+  useEffect(() => {
+    if (isPlanningModalOpen && selectedPlanningDate) {
+      fetchPendingFromYesterday(selectedPlanningDate);
+    }
+  }, [isPlanningModalOpen, selectedPlanningDate]);
+
+  const fetchPendingFromYesterday = async (currentDate: string) => {
+    const prevDateObj = new Date(currentDate + 'T00:00:00');
+    prevDateObj.setDate(prevDateObj.getDate() - 1);
+    const prevDate = prevDateObj.toISOString().split('T')[0];
+
+    try {
+      const res = await fetch(`/api/tareas?fecha=${prevDate}`);
+      const data = await res.json();
+      
+      if (data.tasks) {
+        const dismissedKey = `dismissed_suggestions_${currentDate}`;
+        const dismissedIds = JSON.parse(localStorage.getItem(dismissedKey) || '[]');
+
+        const pending = data.tasks.filter((t: any) => {
+          const isNoRealizada = t.estado_ejecucion === 'no realizado' || !t.estado_ejecucion;
+          if (!isNoRealizada) return false;
+
+          const alreadyAdded = dayTasks.some((ct: any) => 
+            ct.actividad.trim().toLowerCase() === t.actividad.trim().toLowerCase()
+          );
+          if (alreadyAdded) return false;
+
+          const isDismissed = dismissedIds.includes(t.id);
+          if (isDismissed) return false;
+
+          return true;
+        });
+        setPendingSuggestions(pending);
+      }
+    } catch (error) {
+      console.error("Error fetching pending tasks from yesterday:", error);
+    }
+  };
+
+  const handleDiscardSuggestion = (taskId: number) => {
+    const dismissedKey = `dismissed_suggestions_${selectedPlanningDate}`;
+    const dismissedIds = JSON.parse(localStorage.getItem(dismissedKey) || '[]');
+    if (!dismissedIds.includes(taskId)) {
+      dismissedIds.push(taskId);
+      localStorage.setItem(dismissedKey, JSON.stringify(dismissedIds));
+    }
+    setPendingSuggestions(prev => prev.filter(p => p.id !== taskId));
+  };
 
   useEffect(() => {
     if (isPlanningModalOpen && selectedPlanningDate) {
@@ -96,11 +148,26 @@ export default function ConfigView2() {
 
   const currentWeekNumber = getWeekNumber(weekDates[0]);
 
-  useEffect(() => {
+   useEffect(() => {
     fetchBloques();
     fetchBacklog();
     fetchConfig();
+    fetchDailyPlans();
   }, []);
+
+  const fetchDailyPlans = async () => {
+    try {
+      const res = await fetch('/api/planes-diarios');
+      const data = await res.json();
+      const plans: Record<string, any> = {};
+      if (Array.isArray(data)) {
+        data.forEach(d => {
+          plans[d.date] = { start: d.hora_inicio, end: d.hora_fin };
+        });
+      }
+      setDailyPlans(plans);
+    } catch (e) {}
+  };
 
   const fetchConfig = () => fetch('/api/configuracion').then(res => res.json()).then(data => {
     if (data) {
@@ -108,6 +175,20 @@ export default function ConfigView2() {
       if (data.hora_fin) setEndTime(data.hora_fin);
     }
   }).catch(() => {});
+
+  const dayStartSuggestion = (() => {
+    const noRealizadas = pendingSuggestions.filter(t => t.estado_ejecucion === 'no realizado' || !t.estado_ejecucion);
+    if (noRealizadas.length > 0) {
+      const topTask = [...noRealizadas].sort((a, b) => b.prioridad - a.prioridad)[0];
+      return `Prioriza tarea no realizada ayer: "${topTask.actividad}". Es fundamental cerrar ciclos pendientes para mantener el ritmo estratégico.`;
+    }
+
+    if (pendingSuggestions.some((t: any) => t.prioridad === 10)) {
+      return "Podrías comenzar por la tarea crítica pendiente para asegurar avance desde el inicio.";
+    }
+    
+    return "Por ahora no hay suficiente información para sugerir un inicio concreto. Te recomiendo comenzar por lo que consideres más relevante.";
+  })();
 
   const fetchBloques = () => fetch('/api/bloques').then(res => res.json()).then(data => setBloques(Array.isArray(data) ? data : [])).catch(() => setBloques([]));
   const fetchBacklog = () => fetch('/api/backlog').then(res => res.json()).then(data => setBacklog(Array.isArray(data) ? data : [])).catch(() => setBacklog([]));
@@ -182,7 +263,7 @@ export default function ConfigView2() {
     const payload = {
       ...editingTask,
       created_at: editingTask.id ? editingTask.created_at : new Date().toISOString(),
-      status: editingTask.status || 'pendiente',
+      status: editingTask.status || 'nuevo',
       area: editingTask.area || 'Operativo'
     };
 
@@ -197,8 +278,10 @@ export default function ConfigView2() {
     fetchBacklog();
   };
 
-  const handleSaveConfig = async () => {
+   const handleSaveConfig = async (pStart?: string, pEnd?: string) => {
     setIsSaving(true);
+    const start = pStart || startTime;
+    const end = pEnd || endTime;
     try {
       const dates = [];
       let current = new Date(startDate + 'T00:00:00');
@@ -212,10 +295,11 @@ export default function ConfigView2() {
         fetch('/api/plan-diario', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date, hora_inicio: startTime, hora_fin: endTime, horas_efectivas: 6 }),
+          body: JSON.stringify({ date, hora_inicio: start, hora_fin: end, horas_efectivas: 6 }),
         })
       ));
       setMessage('Horario actualizado');
+      fetchDailyPlans();
       setTimeout(() => setMessage(''), 3000);
     } catch (e) { console.error(e); }
     finally { setIsSaving(false); }
@@ -292,6 +376,7 @@ export default function ConfigView2() {
         body: JSON.stringify({ status: 'progreso' }) 
       });
 
+      setPendingSuggestions(prev => prev.filter(p => p.id !== task.id));
       const dayTasksRes = await fetch(`/api/tareas?fecha=${selectedPlanningDate}`);
       if (dayTasksRes.ok) {
          const data = await dayTasksRes.json();
@@ -305,11 +390,35 @@ export default function ConfigView2() {
     }
   };
 
+  const handleClearAllTasks = async () => {
+    if (!selectedPlanningDate) return;
+    if (!window.confirm("¿Estás seguro de que deseas limpiar todas las tareas de este día?")) return;
+    
+    try {
+      await fetch(`/api/tareas/clear?fecha=${selectedPlanningDate}`, { method: 'DELETE' });
+      setDayTasks([]);
+      fetchBacklog(); 
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const calculateTimeInfo = () => {
     const weights: Record<number, number> = { 10: 2, 7: 1.5, 4: 1, 2: 0.5 };
     let usedHours = 0;
     dayTasks.forEach(t => {
-      usedHours += weights[t.prioridad] || 1;
+      const baseHours = weights[t.prioridad] || 1;
+      const status = (t.estado_ejecucion || 'nuevo').toLowerCase();
+      
+      if (status === 'nuevo' || status === 'pendiente') {
+        usedHours += baseHours;
+      } else if (status === 'abierto') {
+        usedHours += baseHours * 0.5; // Abierto consume la mitad del tiempo asignado
+      } else if (status === 'resuelto') {
+        // Usa tiempo invertido si existe (convertido a horas), sino asume 30 min por defecto
+        usedHours += t.tiempo_invertido_minutos ? (t.tiempo_invertido_minutos / 60) : 0.5; 
+      }
+      // En espera, despriorizado, fallido consumen 0 horas
     });
 
     const safeStart = startTime || '08:00';
@@ -373,9 +482,13 @@ export default function ConfigView2() {
                       onChange={e => setEditingTask({...editingTask, status: e.target.value})}
                       className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary"
                     >
-                      <option value="pendiente">Pendiente</option>
-                      <option value="progreso">En Progreso</option>
-                      <option value="finalizado">Finalizado</option>
+                      <option value="nuevo">NUEVO</option>
+                      <option value="abierto">ABIERTO</option>
+                      <option value="pendiente">PENDIENTE</option>
+                      <option value="en espera">EN ESPERA</option>
+                      <option value="resuelto">RESUELTO</option>
+                      <option value="despriorizado">DESPRIORIZADO</option>
+                      <option value="fallido">FALLIDO</option>
                     </select>
                   </div>
                 </div>
@@ -429,6 +542,15 @@ export default function ConfigView2() {
                     <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
                   </div>
                 </div>
+                 <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Presets de Turno</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button onClick={() => { setStartTime('08:00'); setEndTime('17:00'); handleSaveConfig('08:00', '17:00'); setIsJornadaModalOpen(false); }} className="p-2 bg-slate-50 border border-slate-100 rounded-xl text-[9px] font-black text-primary hover:bg-primary hover:text-white transition-all">☀️ MAÑANA</button>
+                    <button onClick={() => { setStartTime('14:00'); setEndTime('23:00'); handleSaveConfig('14:00', '23:00'); setIsJornadaModalOpen(false); }} className="p-2 bg-slate-50 border border-slate-100 rounded-xl text-[9px] font-black text-primary hover:bg-primary hover:text-white transition-all">🌆 TARDE</button>
+                    <button onClick={() => { setStartTime('22:00'); setEndTime('07:00'); handleSaveConfig('22:00', '07:00'); setIsJornadaModalOpen(false); }} className="p-2 bg-slate-50 border border-slate-100 rounded-xl text-[9px] font-black text-primary hover:bg-primary hover:text-white transition-all">🌙 NOCHE</button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Hora Entrada</label>
@@ -592,7 +714,23 @@ export default function ConfigView2() {
                 </button>
               </div>
 
-              <div className="flex-1 flex overflow-hidden bg-slate-50">
+              <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+                {/* Sugerencia de Inicio (Global para el modal) */}
+                <div className="px-6 py-4 bg-[#7DA81A]/5 border-b border-[#7DA81A]/10 flex items-start gap-4">
+                  <div className="p-2 bg-[#7DA81A]/10 rounded-lg text-[#7DA81A]">
+                    <span className="text-sm">⚡</span>
+                  </div>
+                  <div>
+                    <h4 className="text-[10px] font-black text-[#7DA81A] uppercase tracking-wider mb-0.5 flex items-center gap-2">
+                      <span>🧠</span> Sugerencia de Inicio del Día
+                    </h4>
+                    <p className="text-[11px] text-slate-700 font-bold leading-relaxed">
+                      {dayStartSuggestion}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex-1 flex overflow-hidden">
                 {/* 1. Panel Izquierdo: Backlog Disponible */}
                 <div className="w-1/3 flex flex-col border-r border-slate-200 bg-white">
                    <div className="p-5 border-b border-slate-100">
@@ -636,36 +774,96 @@ export default function ConfigView2() {
                 </div>
 
                 {/* 2. Panel Central: Tareas Asignadas al Día */}
-                <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar p-6 space-y-4">
+                <div className="flex-1 flex flex-col min-h-0 overflow-y-auto custom-scrollbar p-6 space-y-4">
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
                       <ListChecks size={16} className="text-primary" />
                       Tareas de {selectedPlanningDate} ({dayTasks.length})
                     </h4>
+                    {dayTasks.length > 0 && (
+                      <button 
+                        onClick={handleClearAllTasks}
+                        className="text-[9px] font-black text-slate-400 hover:text-red-500 uppercase tracking-widest transition-colors flex items-center gap-1"
+                      >
+                        <Trash2 size={12} /> Limpiar Todo
+                      </button>
+                    )}
                   </div>
+
+                  {/* Tareas Pendientes del Día Anterior */}
+                  {pendingSuggestions.length > 0 && (
+                    <div className="mb-6 bg-primary/5 border border-primary/20 rounded-2xl p-4">
+                      <div className="flex items-center gap-2 mb-4 text-primary">
+                        <span className="text-sm">🚀</span>
+                        <h4 className="text-[11px] font-black uppercase tracking-widest">Tareas pendientes del día anterior</h4>
+                      </div>
+                      <div className="space-y-3">
+                        {pendingSuggestions.map(t => (
+                          <div key={t.id} className="bg-white p-6 rounded-[28px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-50 flex flex-col gap-5 transition-all hover:shadow-[0_20px_40px_rgb(0,0,0,0.06)] group">
+                            <div className="flex items-start gap-4">
+                              <div className="flex flex-col gap-2 pt-1">
+                                {(() => {
+                                  const prio = PRIORITIES.find(p => p.value === t.prioridad) || PRIORITIES[3];
+                                  return (
+                                    <span className={`text-[7px] font-black px-2.5 py-1 rounded-full uppercase text-white text-center tracking-widest shadow-sm ${prio.color}`}>
+                                      {prio.label}
+                                    </span>
+                                  );
+                                })()}
+                                {t.area && (
+                                  <span className="text-[7px] font-black text-slate-300 bg-slate-50 px-2.5 py-1 rounded-full uppercase text-center tracking-widest border border-slate-100">{t.area}</span>
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <span className="text-[12px] font-bold text-slate-800 leading-relaxed block">{t.actividad}</span>
+                                <p className="text-[9px] font-medium text-slate-400 mt-1 italic">Pendiente desde el turno anterior</p>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                              <button 
+                                onClick={() => handleDiscardSuggestion(t.id)}
+                                className="px-3 py-1.5 text-slate-300 hover:text-red-400 text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 hover:bg-red-50 rounded-full"
+                              >
+                                <X size={12} /> Descartar
+                              </button>
+                              
+                              <button 
+                                onClick={() => handleAssignToDayFromModal(t)}
+                                className="px-5 py-2 bg-gradient-to-r from-primary to-primary-soft text-white text-[9px] font-black rounded-full hover:shadow-lg hover:shadow-primary/20 transition-all flex items-center gap-2 active:scale-95 shadow-md uppercase tracking-widest"
+                              >
+                                <Plus size={12} /> Agregar a mi día
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {dayTasks.length > 0 ? (
                     <div className="space-y-3">
                       {dayTasks.map(t => (
-                        <div key={t.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between group">
-                          <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">{t.actividad}</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[8px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md uppercase">{t.area || 'Gral'}</span>
+                        <div key={t.id} className="bg-white p-4 rounded-[22px] border border-slate-100 shadow-sm flex items-center justify-between group hover:border-primary/20 transition-all">
+                          <div className="flex items-center gap-4">
+                            <div className="flex flex-col gap-1.5">
+                              <span className="text-[7px] font-black text-slate-300 bg-slate-50 px-2 py-0.5 rounded-md uppercase border border-slate-100 w-fit">{t.area || 'Gral'}</span>
                               {(() => {
                                 const prio = PRIORITIES.find(p => p.value === t.prioridad) || PRIORITIES[3];
                                 return (
-                                  <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase text-white shadow-sm ${prio.color}`}>
+                                  <span className={`text-[7px] font-black px-2 py-0.5 rounded-full uppercase text-white shadow-sm ${prio.color} w-fit`}>
                                     {prio.label}
                                   </span>
                                 );
                               })()}
                             </div>
+                            <span className="text-[11px] font-bold text-slate-700">{t.actividad}</span>
                           </div>
                           <button onClick={async () => {
                             await fetch(`/api/tareas/${t.id}`, { method: 'DELETE' });
                             setDayTasks(prev => prev.filter(x => x.id !== t.id));
                             fetchBacklog();
-                          }} className="text-slate-300 hover:text-red-500 transition-colors p-2 opacity-0 group-hover:opacity-100">
+                          }} className="text-slate-200 hover:text-red-500 transition-colors p-2 opacity-0 group-hover:opacity-100">
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -695,26 +893,31 @@ export default function ConfigView2() {
                         <span className="text-[11px] font-black text-slate-800">{endTime}</span>
                       </div>
                       
-                      <div className="bg-primary/5 border border-primary/10 rounded-2xl p-5 flex flex-col items-center text-center mt-2 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-2 opacity-5">
-                          <Clock size={40} className="text-primary" />
+                        <div className="bg-primary/5 border border-primary/10 rounded-2xl p-5 flex flex-col items-center text-center mt-2 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 p-2 opacity-5">
+                            <Clock size={40} className="text-primary" />
+                          </div>
+                          <span className="text-[10px] font-black text-primary uppercase tracking-widest mb-1 relative z-10">Jornada Efectiva</span>
+                          <span className="text-2xl font-black text-primary relative z-10">{availableHours.toFixed(1)}h</span>
                         </div>
-                        <span className="text-[10px] font-black text-primary uppercase tracking-widest mb-1 relative z-10">Jornada Efectiva</span>
-                        <span className="text-2xl font-black text-slate-800 relative z-10">{availableHours.toFixed(1)} <span className="text-[10px] text-slate-400">hrs</span></span>
-                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-2 bg-white px-3 py-1 rounded-full shadow-sm relative z-10">Disponibles</span>
-                      </div>
                     </div>
                   </div>
 
-                  {/* Calculo de Capacidad */}
-                  <div className="p-6 flex-1 flex flex-col gap-4 bg-white">
-                    <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-                       <span className="text-[10px] font-bold text-slate-500 uppercase">Tiempo Planificado</span>
-                       <span className="text-[11px] font-black text-slate-800">{usedHours.toFixed(1)} hrs</span>
-                    </div>
-                    <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-                       <span className="text-[10px] font-bold text-slate-500 uppercase">Tiempo Restante</span>
-                       <span className={`text-[11px] font-black ${remainingHours < 0 ? 'text-red-500' : 'text-emerald-500'}`}>{remainingHours.toFixed(1)} hrs</span>
+                  {/* Calculo de Capacidad Visual */}
+                  <div className="p-6 flex-1 flex flex-col gap-6 bg-white">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Carga del Día</span>
+                        <span className={`text-[10px] font-black uppercase ${remainingHours < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                          {remainingHours < 0 ? 'Sobrecargado' : 'Capacidad Óptima'}
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden flex shadow-inner">
+                        <div 
+                          className={`h-full transition-all duration-500 ${remainingHours < 0 ? 'bg-red-500' : 'bg-emerald-500'}`}
+                          style={{ width: `${Math.min((usedHours / availableHours) * 100, 100)}%` }}
+                        />
+                      </div>
                     </div>
                     
                     {remainingHours < 0 ? (
@@ -745,6 +948,7 @@ export default function ConfigView2() {
                   </div>
                 </div>
               </div>
+            </div>
             </motion.div>
           </div>
         )}
@@ -816,28 +1020,52 @@ export default function ConfigView2() {
             const dateStr = date.toISOString().split('T')[0];
             const dayBlocks = bloques.filter(b => b.dia_semana === diaNombre || b.fecha === dateStr);
             const isToday = new Date().toISOString().split('T')[0] === dateStr;
+            const isFuture = dateStr > new Date().toISOString().split('T')[0];
 
             return (
               <div 
                 key={diaNombre} 
                 id={`day-col-${dateStr}`}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => handleDropToDay(e, dateStr)}
-                onClick={() => { setSelectedPlanningDate(dateStr); setIsPlanningModalOpen(true); }}
-                className={`flex flex-col rounded-2xl border overflow-hidden transition-all hover:shadow-md group cursor-pointer ${isToday ? 'bg-primary/5 border-primary/20 shadow-md ring-1 ring-primary/10' : 'bg-slate-50/50 border-slate-100'}`}
+                onDragOver={e => !isFuture && e.preventDefault()}
+                onDrop={e => !isFuture && handleDropToDay(e, dateStr)}
+                onClick={() => {
+                  if (isFuture) return;
+                  setSelectedPlanningDate(dateStr); 
+                  setIsPlanningModalOpen(true); 
+                }}
+                className={`flex flex-col rounded-2xl border overflow-hidden transition-all relative group ${isFuture ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-md'} ${isToday ? 'bg-primary/5 border-primary/20 shadow-md ring-1 ring-primary/10' : 'bg-slate-50/50 border-slate-100'}`}
               >
+                {isFuture && (
+                  <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-end pb-4 bg-slate-50/10">
+                     <div className="bg-white/90 backdrop-blur-sm border border-slate-200 px-3 py-1.5 rounded-full shadow-sm flex items-center gap-2 mb-2">
+                       <Clock size={12} className="text-slate-400" />
+                       <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Planificación Cerrada</span>
+                     </div>
+                  </div>
+                )}
                 <div className={`p-3 transition-colors text-center ${isToday ? 'bg-primary text-white' : 'bg-primary group-hover:bg-primary-soft text-white'}`}>
                   <h4 className="text-[10px] font-black uppercase tracking-widest">{diaNombre}</h4>
                   <p className={`text-[9px] font-bold mt-0.5 ${isToday ? 'text-white/80' : 'text-white/60'}`}>{date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}</p>
                 </div>
                 
                 <div className="p-4 space-y-5">
-                  {/* Jornada Base */}
-                  <div className={`relative pl-3 border-l-2 ${isToday ? 'border-primary' : 'border-primary/20'}`}>
+                   <div 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStartDate(dateStr);
+                      setEndDate(dateStr);
+                      setStartTime(dailyPlans[dateStr]?.start || '08:00');
+                      setEndTime(dailyPlans[dateStr]?.end || '17:00');
+                      setIsJornadaModalOpen(true);
+                    }}
+                    className={`relative pl-3 border-l-2 hover:bg-primary/5 transition-all rounded-r-lg p-1 ${isToday ? 'border-primary' : 'border-primary/20'}`}
+                  >
                     <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Jornada Base</span>
                     <div className="flex items-center gap-2 mt-1">
                       <Clock size={10} className={isToday ? 'text-primary' : 'text-primary/60'} />
-                      <span className="text-[10px] font-black text-slate-700">{startTime} - {endTime}</span>
+                      <span className="text-[10px] font-black text-slate-700">
+                        {dailyPlans[dateStr]?.start || '08:00'} - {dailyPlans[dateStr]?.end || '17:00'}
+                      </span>
                     </div>
                   </div>
 
@@ -856,7 +1084,10 @@ export default function ConfigView2() {
                                 <div className="w-1.5 h-1.5 rounded-full bg-accent" />
                                 <span className="text-[8px] font-black text-slate-700 uppercase">{b.tipo}</span>
                               </div>
-                              <button onClick={() => deleteBloque(b.id)} className="opacity-0 group-hover/item:opacity-100 text-slate-300 hover:text-red-500 transition-all">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); deleteBloque(b.id); }} 
+                                className="opacity-0 group-hover/item:opacity-100 text-slate-300 hover:text-red-500 transition-all p-1"
+                              >
                                 <Trash2 size={10} />
                               </button>
                             </div>
@@ -904,9 +1135,6 @@ export default function ConfigView2() {
             >
               <Plus size={14} /> Nueva Tarea
             </button>
-            <button onClick={() => fetch('/api/reset-database', { method: 'POST' }).then(() => window.location.reload())} className="px-4 py-2 text-[9px] font-black text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all flex items-center gap-2">
-              <Database size={12} /> REINICIAR TABLERO
-            </button>
           </div>
         </div>
 
@@ -943,15 +1171,48 @@ export default function ConfigView2() {
                         onDragStart={e => handleDragStart(e, task.id)}
                         onClick={() => { setEditingTask(task); setIsModalOpen(true); }}
                         className={`w-[240px] p-4 rounded-2xl border shadow-sm transition-all group/card relative cursor-pointer active:scale-95 flex flex-col gap-2 ${
-                          task.status === 'progreso' 
-                            ? 'bg-slate-50 border-slate-200 opacity-60 grayscale hover:grayscale-0 hover:opacity-100' 
-                            : 'bg-white border-slate-200 hover:shadow-md hover:border-primary/30'
+                          task.status === 'nuevo'
+                            ? 'bg-cyan-50 border-cyan-200 shadow-md ring-2 ring-cyan-500/20'
+                          : task.status === 'abierto' 
+                            ? 'bg-purple-50 border-purple-200 shadow-md ring-2 ring-purple-500/20' 
+                          : task.status === 'pendiente' 
+                            ? 'bg-white border-slate-200 hover:shadow-md hover:border-blue-500/30' 
+                          : task.status === 'resuelto'
+                            ? 'bg-emerald-50 border-emerald-200 opacity-60'
+                          : 'bg-white border-slate-200 hover:shadow-md hover:border-primary/30'
                         }`}
                       >
                          <div className="flex items-center justify-between">
-                           <span className="text-[7px] font-black text-slate-300 uppercase tracking-widest">#{task.id}</span>
-                           <span className="text-[7px] font-black bg-slate-50 text-slate-400 px-2 py-0.5 rounded-md uppercase">{task.area || 'Gral'}</span>
-                         </div>
+                            <span className="text-[7px] font-black text-slate-300 uppercase tracking-widest">#{task.id}</span>
+                            <div className="flex gap-1.5">
+                              <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase ${
+                                task.status === 'nuevo' ? 'bg-cyan-500 text-white' :
+                                task.status === 'abierto' ? 'bg-purple-500 text-white' :
+                                task.status === 'pendiente' ? 'bg-blue-500 text-white' :
+                                task.status === 'en espera' ? 'bg-amber-500 text-white' :
+                                task.status === 'resuelto' ? 'bg-emerald-500 text-white' :
+                                task.status === 'despriorizado' ? 'bg-slate-500 text-white' :
+                                'bg-red-500 text-white'
+                              }`}>
+                                {task.status === 'nuevo' ? 'NUEVO' :
+                                 task.status === 'abierto' ? 'ABIERTO' :
+                                 task.status === 'pendiente' ? 'PENDIENTE' :
+                                 task.status === 'en espera' ? 'EN ESPERA' :
+                                 task.status === 'resuelto' ? 'RESUELTO' :
+                                 task.status === 'despriorizado' ? 'DESPRIORIZADO' : 'FALLIDO'}
+                              </span>
+                              <span className="text-[7px] font-black bg-slate-50 text-slate-400 px-2 py-0.5 rounded-md uppercase">{task.area || 'Gral'}</span>
+                            </div>
+                            {task.created_at && (
+                              <div className={`text-[8px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                                Math.floor((new Date().getTime() - new Date(task.created_at).getTime()) / (1000 * 60 * 60 * 24)) > 2 
+                                  ? 'text-red-500 bg-red-50' 
+                                  : 'text-slate-400 bg-slate-50'
+                              }`}>
+                                <Clock size={10} /> {Math.floor((new Date().getTime() - new Date(task.created_at).getTime()) / (1000 * 60 * 60 * 24))}d
+                              </div>
+                            )}
+                          </div>
                          <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight leading-snug">{task.actividad}</p>
                          <div className="flex justify-between items-end mt-auto pt-2 border-t border-slate-50">
                             <span className="text-[8px] font-bold text-slate-400">{task.created_at ? new Date(task.created_at).toLocaleDateString() : 'N/A'}</span>
