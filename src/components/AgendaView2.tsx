@@ -720,38 +720,39 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="mt-16 bg-slate-900 rounded-[48px] p-12 text-white shadow-3xl shadow-slate-300 relative overflow-hidden"
+            className="mt-16 bg-white rounded-[48px] p-12 text-slate-800 shadow-2xl shadow-slate-200/50 border border-slate-100 relative overflow-hidden"
+            style={{ fontFamily: "'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif" }}
           >
-            {/* Fondo decorativo Pro */}
-            <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -mr-48 -mt-48" />
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl -ml-32 -mb-32" />
+            {/* Fondo decorativo Light */}
+            <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl -mr-48 -mt-48 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl -ml-32 -mb-32 pointer-events-none" />
 
             <div className="relative z-10">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
                 <div className="flex items-center gap-5">
-                  <div className="p-4 bg-white/10 rounded-3xl backdrop-blur-md">
-                    <BarChart3 size={32} className="text-amber-400" />
+                  <div className="p-4 bg-amber-50 rounded-3xl border border-amber-100">
+                    <BarChart3 size={32} className="text-amber-500" />
                   </div>
                   <div>
-                    <h3 className="text-3xl font-black tracking-tight leading-tight">Cierre de Jornada</h3>
+                    <h3 className="text-3xl font-black tracking-tight leading-tight text-slate-900">Cierre de Jornada</h3>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Bitácora Detallada de Ejecución</p>
                   </div>
                 </div>
                 <div className="flex gap-4">
-                   <div className="px-6 py-3 bg-[#7DA81A]/10 border border-[#7DA81A]/20 rounded-2xl">
+                   <div className="px-6 py-3 bg-emerald-50 border border-emerald-100 rounded-2xl">
                       <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Resumen de Impacto</p>
-                      <p className="text-sm font-black text-[#7DA81A] uppercase tracking-widest flex items-center gap-2 mt-1">
+                      <p className="text-sm font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2 mt-1">
                          <CheckCircle2 size={14} /> {porcentajeEstrategico}% LOGRADO
                       </p>
                    </div>
                 </div>
               </div>
 
-              {/* Bitácora Detallada tipo Excel */}
+              {/* Bitácora Detallada tipo Excel (Light) */}
               <div className="space-y-6">
-                 <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                     <h4 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Bitácora Detallada de Ejecución</h4>
-                    <div className="px-4 py-1.5 bg-white/5 rounded-full border border-white/10 text-[9px] font-black text-slate-500">
+                    <div className="px-4 py-1.5 bg-slate-50 rounded-full border border-slate-200 text-[9px] font-black text-slate-500">
                        EXPORTACIÓN VISUAL
                     </div>
                  </div>
@@ -759,47 +760,49 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                  <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                        <thead>
-                          <tr className="border-b border-white/5">
-                             <th className="py-4 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Actividad</th>
-                             <th className="py-4 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Impacto</th>
-                             <th className="py-4 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Estado</th>
-                             <th className="py-4 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Hallazgos y Aprendizajes</th>
-                             <th className="py-4 px-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Justificación de Desviación</th>
+                          <tr className="border-b border-slate-100">
+                             <th className="py-4 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Actividad</th>
+                             <th className="py-4 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Impacto</th>
+                             <th className="py-4 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Estado</th>
+                             <th className="py-4 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Hallazgos y Aprendizajes</th>
+                             <th className="py-4 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Justificación de Desviación</th>
                           </tr>
                        </thead>
                        <tbody>
                           {tasks.map((task) => (
-                             <tr key={task.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
+                             <tr key={task.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group">
                                 <td className="py-5 px-4">
-                                   <p className="text-xs font-black text-white group-hover:text-amber-400 transition-colors">{task.actividad}</p>
-                                   <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">ID: #{task.id}</p>
+                                   <p className="text-xs font-black text-slate-700 group-hover:text-primary transition-colors">{task.actividad}</p>
+                                   <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">ID: #{task.id}</p>
                                 </td>
                                 <td className="py-5 px-4 text-center">
                                    <span className={`text-[9px] font-black px-2 py-1 rounded-md ${
-                                      task.prioridad >= 10 ? 'bg-red-500/10 text-red-500' :
-                                      task.prioridad >= 7 ? 'bg-amber-500/10 text-amber-500' :
-                                      'bg-slate-500/10 text-slate-400'
+                                      task.prioridad >= 10 ? 'bg-red-50 text-red-500 border border-red-100' :
+                                      task.prioridad >= 7 ? 'bg-amber-50 text-amber-500 border border-amber-100' :
+                                      'bg-slate-50 text-slate-500 border border-slate-100'
                                    }`}>
                                       {task.prioridad >= 10 ? 'CRÍTICA' : task.prioridad >= 7 ? 'ALTA' : 'MEDIA'}
                                    </span>
                                 </td>
                                 <td className="py-5 px-4 text-center">
                                    <span className={`text-[9px] font-black px-2 py-1 rounded-md ${
-                                      task.estado_ejecucion === 'terminada' ? 'bg-[#7DA81A]/20 text-[#7DA81A]' :
-                                      task.estado_ejecucion === 'despriorizada' ? 'bg-amber-500/20 text-amber-500' :
-                                      'bg-slate-500/20 text-slate-400'
+                                      task.estado_ejecucion === 'terminada' || task.estado_ejecucion === 'resuelto' ? 'bg-emerald-50 border border-emerald-100 text-emerald-600' :
+                                      task.estado_ejecucion === 'despriorizado' ? 'bg-slate-100 border border-slate-200 text-slate-500' :
+                                      task.estado_ejecucion === 'abierto' ? 'bg-purple-50 border border-purple-100 text-purple-600' :
+                                      task.estado_ejecucion === 'fallido' ? 'bg-red-50 border border-red-100 text-red-600' :
+                                      'bg-blue-50 border border-blue-100 text-blue-600'
                                    }`}>
                                       {task.estado_ejecucion?.toUpperCase() || 'PENDIENTE'}
                                    </span>
                                 </td>
                                 <td className="py-5 px-4">
-                                   <p className="text-[11px] font-medium text-slate-300 leading-relaxed max-w-xs italic">
-                                      {task.hallazgos ? `"${task.hallazgos}"` : <span className="text-slate-600 opacity-50">— Sin comentarios —</span>}
+                                   <p className="text-[11px] font-medium text-slate-600 leading-relaxed max-w-xs italic">
+                                      {task.hallazgos ? `"${task.hallazgos}"` : <span className="text-slate-400 opacity-50">— Sin comentarios —</span>}
                                    </p>
                                 </td>
                                 <td className="py-5 px-4">
-                                   <p className="text-[11px] font-medium text-amber-500/80 leading-relaxed max-w-xs italic">
-                                      {task.justificacion ? `"${task.justificacion}"` : <span className="text-slate-600 opacity-50">— N/A —</span>}
+                                   <p className="text-[11px] font-medium text-amber-600 leading-relaxed max-w-xs italic">
+                                      {task.justificacion ? `"${task.justificacion}"` : <span className="text-slate-400 opacity-50">— N/A —</span>}
                                    </p>
                                 </td>
                              </tr>
