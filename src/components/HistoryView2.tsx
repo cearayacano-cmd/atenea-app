@@ -27,14 +27,15 @@ const getPriorityInfo = (value: number) => {
 
 const getStatusColor = (status: string) => {
   switch (status.toLowerCase()) {
-    case 'nuevo': return 'bg-cyan-100 text-cyan-700 border-cyan-200';
-    case 'abierto': return 'bg-purple-100 text-purple-700 border-purple-200';
-    case 'pendiente': return 'bg-blue-100 text-blue-700 border-blue-200';
-    case 'en espera': return 'bg-amber-100 text-amber-700 border-amber-200';
-    case 'resuelto': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-    case 'despriorizado': return 'bg-slate-100 text-slate-700 border-slate-200';
-    case 'fallido': return 'bg-red-100 text-red-700 border-red-200';
-    default: return 'bg-slate-100 text-slate-600 border-slate-200';
+    case 'nuevo': return 'bg-amber-50 text-amber-600 border-amber-100';
+    case 'abierto': return 'bg-red-50 text-red-600 border-red-100';
+    case 'pendiente': return 'bg-sky-50 text-sky-500 border-sky-100';
+    case 'en espera': return 'bg-slate-900 text-white border-slate-900';
+    case 'resuelto': return 'bg-slate-100 text-slate-500 border-slate-200';
+    case 'despriorizado': return 'bg-slate-50 text-slate-400 border-slate-100';
+    case 'fallo':
+    case 'fallido': return 'bg-rose-50 text-rose-700 border-rose-100';
+    default: return 'bg-slate-50 text-slate-600 border-slate-100';
   }
 };
 
@@ -46,7 +47,7 @@ const STATUS_OPTIONS = [
   { id: 'en espera', label: 'En espera' },
   { id: 'resuelto', label: 'Resuelto' },
   { id: 'despriorizado', label: 'Despriorizado' },
-  { id: 'fallido', label: 'Fallido' },
+  { id: 'fallo', label: 'Fallo' },
 ];
 
 export default function HistoryView() {
@@ -167,17 +168,19 @@ export default function HistoryView() {
   });
 
   return (
-    <div className="space-y-10 pb-20 max-w-7xl mx-auto">
+    <div className="space-y-10 pb-20 w-full">
       {/* Header Premium */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <h2 className="text-4xl font-black text-[#0F004F] tracking-tight flex items-center gap-3">
-             <History className="text-[#99CC33]" size={40} />
-             Historial Inteligente
-          </h2>
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">
-             Trazabilidad Estratégica y Auditoría Operativa
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-primary/10 rounded-2xl text-primary">
+             <History size={28} />
+          </div>
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Historial Inteligente</h2>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">
+               Trazabilidad Estratégica y Auditoría Operativa
+            </p>
+          </div>
         </div>
 
         {/* Dashboard de Salud del Backlog */}
@@ -247,7 +250,7 @@ export default function HistoryView() {
           <p className="text-slate-400 font-bold">No hay registros que coincidan con tu búsqueda.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTasks.map((task, idx) => {
             const taskKey = `${task.actividad}-${task.area}`;
             const isExpanded = expandedTasks.includes(taskKey);
@@ -256,65 +259,81 @@ export default function HistoryView() {
             return (
               <motion.div 
                 key={taskKey}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className={`bg-white rounded-[40px] border transition-all duration-500 overflow-hidden group shadow-xl ${
-                   isExpanded ? 'border-[#99CC33] shadow-[#99CC33]/10 ring-4 ring-[#99CC33]/5' : 'border-slate-100 shadow-slate-200/30 hover:border-[#99CC33]/30'
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: idx * 0.03 }}
+                className={`group relative bg-white rounded-[32px] border transition-all duration-500 overflow-hidden cursor-pointer shadow-sm hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-2 ${
+                   isExpanded ? 'border-primary ring-4 ring-primary/5' : 'border-slate-100'
                 }`}
+                onClick={() => toggleExpand(taskKey)}
               >
-                <div
-                  className="p-8 flex items-center justify-between cursor-pointer"
-                  onClick={() => toggleExpand(taskKey)}
-                >
-                  <div className="flex items-center gap-8 flex-1">
-                    <div className={`p-4 rounded-3xl transition-all duration-500 ${task.completada ? 'bg-[#99CC33]/10 text-[#99CC33]' : 'bg-slate-50 text-slate-300 group-hover:bg-slate-100'}`}>
-                      {task.completada ? <CheckCircle2 size={32} /> : <Circle size={32} />}
-                    </div>
+                {/* Fondo sutil de Glassmorphism en el header */}
+                <div className={`absolute top-0 left-0 right-0 h-1 transition-colors duration-500 ${
+                   task.prioridad >= 10 ? 'bg-red-500' : task.prioridad >= 7 ? 'bg-amber-400' : 'bg-primary'
+                }`} />
 
-                    <div className="flex-1 space-y-3">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <span className="px-3 py-1 bg-slate-50 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-tighter flex items-center gap-1.5 border border-slate-100">
-                          <Calendar size={12} /> {task.fechas.length} ejecuciones
-                        </span>
-                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter border ${
-                           task.prioridad >= 7 ? 'bg-[#ED1650]/10 text-[#ED1650] border-[#ED1650]/20' : 'bg-slate-50 text-slate-400 border-slate-100'
-                        }`}>
-                          {priority.label}
-                        </span>
-                        {task.area && (
-                          <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter bg-[#00D6CC]/10 text-[#00D6CC] border border-[#00D6CC]/20">
-                            {task.area}
-                          </span>
-                        )}
-                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter border ${getStatusColor(task.backlog_status)}`}>
-                          {task.backlog_status === 'nuevo' ? 'NUEVO' :
-                           task.backlog_status === 'abierto' ? 'ABIERTO' :
-                           task.backlog_status === 'pendiente' ? 'PENDIENTE' :
-                           task.backlog_status === 'en espera' ? 'EN ESPERA' :
-                           task.backlog_status === 'resuelto' ? 'RESUELTO' :
-                           task.backlog_status === 'despriorizado' ? 'DESPRIORIZADO' :
-                           task.backlog_status === 'fallido' ? 'FALLIDO' : task.backlog_status}
-                        </span>
-                      </div>
-                      <h4 className={`text-xl font-black leading-tight transition-colors duration-500 ${isExpanded ? 'text-[#0F004F]' : 'text-slate-800'}`}>
-                        {task.actividad}
-                      </h4>
-                    </div>
+                <div className="flex flex-col h-full">
+                  {/* Header: Status y Progreso */}
+                  <div className="p-5 flex items-center justify-between bg-slate-50/40 border-b border-slate-50">
+                     <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-sm bg-primary/10 text-primary border border-primary/20`}>
+                           <CheckCircle2 size={20} />
+                        </div>
+                        <div className="flex flex-col">
+                           <span className="text-[10px] font-black text-slate-800 tracking-tight">{task.fechas.length}</span>
+                           <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">Ejecuciones</span>
+                        </div>
+                     </div>
+                     <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase border shadow-sm backdrop-blur-md ${getStatusColor(task.backlog_status || 'resuelto')}`}>
+                        {task.backlog_status?.toUpperCase() || 'RESUELTO'}
+                     </div>
                   </div>
 
-                  <div className={`p-4 rounded-2xl transition-all duration-500 ${isExpanded ? 'bg-[#0F004F] text-white rotate-180' : 'bg-slate-50 text-slate-400'}`}>
-                    <ChevronDown size={20} />
+                  {/* Body: Actividad */}
+                  <div className="p-6 flex-1 flex flex-col justify-between">
+                     <div className="space-y-4">
+                        <h4 className={`text-sm font-black leading-snug transition-colors duration-500 ${isExpanded ? 'text-primary' : 'text-slate-800'}`}>
+                           {task.actividad.split(' - Día')[0]}
+                        </h4>
+                        <div className="flex items-center gap-2">
+                           <div className={`w-2 h-2 rounded-full animate-pulse ${
+                              task.completada ? 'bg-emerald-500' : 'bg-amber-500'
+                           }`} />
+                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                              {task.fechas[0] ? `Último: ${task.fechas[0]}` : 'Sin fecha'}
+                           </span>
+                        </div>
+                     </div>
+
+                     {/* Footer: Metadata */}
+                     <div className="mt-6 flex items-center justify-between pt-4 border-t border-slate-50">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-100">
+                           <div className="w-1.5 h-1.5 rounded-full bg-[#00D6CC]" />
+                           <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{task.area || 'CORE'}</span>
+                        </div>
+                        <span className={`px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest border shadow-inner ${
+                           task.prioridad >= 10 ? 'bg-red-50 text-red-500 border-red-100' :
+                           task.prioridad >= 7 ? 'bg-amber-50 text-amber-500 border-amber-100' :
+                           'bg-slate-50 text-slate-400 border-slate-100'
+                        }`}>
+                           {priority.label}
+                        </span>
+                     </div>
                   </div>
                 </div>
 
+                {/* Indicador de expansión minimalista */}
+                <div className={`absolute bottom-3 left-1/2 -translate-x-1/2 transition-all duration-500 ${isExpanded ? 'text-primary' : 'text-slate-200 opacity-0 group-hover:opacity-100'}`}>
+                   <ChevronDown size={14} className={`transition-transform duration-500 ${isExpanded ? 'rotate-180' : ''}`} />
+                </div>
+
                 {isExpanded && (
-                  <div className="p-6 pt-0 border-t border-border-soft/50 bg-bg-main/20 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                  <div className="p-6 pt-0 border-t border-slate-100 bg-slate-50/30 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="grid grid-cols-1 gap-6 mt-6">
                       <div className="space-y-6">
                         {task.hallazgos.length > 0 && (
                           <div>
-                            <h5 className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                               <Search size={12} />
                               Hallazgos y Descubrimientos Acumulados
                             </h5>
@@ -410,14 +429,48 @@ export default function HistoryView() {
                             </div>
                           </div>
                         )}
+
+                        {/* Línea de Tiempo Operativa (Logs) */}
+                        <div>
+                          <h5 className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <Clock size={12} className="text-primary" />
+                            Trazabilidad Operativa (Log de Estados)
+                          </h5>
+                          {task.logs && task.logs.length > 0 ? (
+                            <div className="space-y-3 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-slate-100">
+                              {task.logs.sort((a: any, b: any) => new Date(b.hora).getTime() - new Date(a.hora).getTime()).map((log: any, i: number) => (
+                                <div key={i} className="relative pl-8 group">
+                                  <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full border-4 border-white shadow-sm flex items-center justify-center transition-all group-hover:scale-110 ${
+                                    log.estado_nuevo === 'resuelto' ? 'bg-emerald-500' : 
+                                    log.estado_nuevo === 'abierto' ? 'bg-red-500' : 
+                                    'bg-slate-200'
+                                  }`} />
+                                  <div className="p-3 bg-white border border-slate-50 rounded-2xl shadow-sm hover:border-primary/20 transition-all">
+                                    <div className="flex justify-between items-center mb-1">
+                                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                                        {log.fecha} • {log.comentario?.split('las ')[1] || log.hora?.split('T')[1]?.slice(0,5) || 'HH:MM'}
+                                      </span>
+                                      <span className={`text-[8px] font-black px-2 py-0.5 rounded-md border ${getStatusColor(log.estado_nuevo)}`}>
+                                        {log.estado_nuevo?.toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] font-medium text-slate-600 italic">
+                                      "{log.estado_anterior?.toUpperCase()} → {log.estado_nuevo?.toUpperCase()}"
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-8 text-center text-slate-300 italic text-xs bg-slate-50/50 rounded-3xl border border-dashed border-slate-100">
+                               No hay registros de cambios de estado para esta actividad.
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    {task.hallazgos.length === 0 && task.justificaciones.length === 0 && task.evidencias.length === 0 && (
-                      <div className="py-8 text-center text-text-muted italic text-sm">
-                        No hay registros acumulados para esta actividad.
-                      </div>
-                    )}
                   </div>
+
                 )}
               </motion.div>
             );

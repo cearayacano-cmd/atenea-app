@@ -65,7 +65,9 @@ db.exec(`
     fecha TEXT,
     hora_inicio TEXT,
     hora_fin TEXT,
-    tipo TEXT
+    tipo TEXT,
+    descripcion TEXT,
+    dia_semana TEXT
   );
 
   CREATE TABLE IF NOT EXISTS Backlog (
@@ -77,7 +79,18 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS LogsTareas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tarea_id INTEGER,
+    estado_anterior TEXT,
+    estado_nuevo TEXT,
+    fecha_hora DATETIME DEFAULT CURRENT_TIMESTAMP,
+    comentario TEXT,
+    FOREIGN KEY(tarea_id) REFERENCES Tareas(id)
+  );
+
   INSERT OR IGNORE INTO Configuracion (id, hora_inicio, hora_fin, horas_efectivas) VALUES (1, '08:00', '17:00', 6.0);
+
 `);
 
 // Migration: Add columns if they don't exist (for existing databases)
@@ -135,6 +148,15 @@ if (!planColumns.includes("ejecucion_iniciada")) {
 }
 if (!planColumns.includes("hora_inicio_ejecucion")) {
   db.exec("ALTER TABLE PlanesDiarios ADD COLUMN hora_inicio_ejecucion TEXT");
+}
+
+const bloquesInfo = db.prepare("PRAGMA table_info(BloquesNoDisponibles)").all();
+const bloquesColumns = bloquesInfo.map((c: any) => c.name);
+if (!bloquesColumns.includes("descripcion")) {
+  db.exec("ALTER TABLE BloquesNoDisponibles ADD COLUMN descripcion TEXT");
+}
+if (!bloquesColumns.includes("dia_semana")) {
+  db.exec("ALTER TABLE BloquesNoDisponibles ADD COLUMN dia_semana TEXT");
 }
 
 const blockInfo = db.prepare("PRAGMA table_info(BloquesNoDisponibles)").all();
@@ -219,6 +241,11 @@ async function startServer() {
     res.json({ tasks, plan });
   });
 
+  app.get("/api/audit-tiempos", (req, res) => {
+    const tasks = db.prepare("SELECT * FROM Tareas WHERE estado_ejecucion = 'resuelto' ORDER BY fecha DESC LIMIT 100").all();
+    res.json({ tasks });
+  });
+
   app.post("/api/tareas", (req, res) => {
     const { fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area } = req.body;
     db.prepare("INSERT INTO Tareas (fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -230,7 +257,18 @@ async function startServer() {
     const { id } = req.params;
     const { actividad, prioridad, completada, estado_ejecucion, hallazgos, justificacion, evidencia, hora_inicio_plan, hora_fin_plan, tiempo_asignado_minutos, tiempo_invertido_minutos, area } = req.body;
 
+    // Fetch current state for logging
+    const currentTask = db.prepare("SELECT estado_ejecucion FROM Tareas WHERE id = ?").get(id);
+
     console.log(`Updating task ${id}:`, req.body);
+
+    // Si hay un cambio de estado, lo registramos en LogsTareas
+    if (estado_ejecucion !== undefined && currentTask && currentTask.estado_ejecucion !== estado_ejecucion) {
+      const now = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      db.prepare("INSERT INTO LogsTareas (tarea_id, estado_anterior, estado_nuevo, comentario) VALUES (?, ?, ?, ?)")
+        .run(id, currentTask.estado_ejecucion || 'NUEVO', estado_ejecucion, `Cambio de estado a las ${now}`);
+    }
+
 
     const updates = [];
     const params = [];
@@ -245,7 +283,7 @@ async function startServer() {
     if (estado_ejecucion !== undefined) {
       updates.push("estado_ejecucion = ?");
       params.push(estado_ejecucion);
-      finalCompletada = (estado_ejecucion === 'terminada' ? 1 : 0);
+      finalCompletada = (['terminada', 'resuelto'].includes(estado_ejecucion) ? 1 : 0);
     }
 
     if (finalCompletada !== undefined) {
@@ -289,6 +327,12 @@ async function startServer() {
     }
 
     res.json({ success: true });
+  });
+
+  app.get("/api/tareas/:id/logs", (req, res) => {
+    const { id } = req.params;
+    const logs = db.prepare("SELECT * FROM LogsTareas WHERE tarea_id = ? ORDER BY id DESC").all(id);
+    res.json({ logs });
   });
 
   app.delete("/api/tareas/clear", (req, res) => {
@@ -392,9 +436,9 @@ async function startServer() {
   });
 
   app.post("/api/bloques", (req, res) => {
-    const { fecha, hora_inicio, hora_fin, tipo, dia_semana } = req.body;
-    db.prepare("INSERT INTO BloquesNoDisponibles (fecha, hora_inicio, hora_fin, tipo, dia_semana) VALUES (?, ?, ?, ?, ?)")
-      .run(fecha || null, hora_inicio, hora_fin, tipo, dia_semana || null);
+    const { fecha, hora_inicio, hora_fin, tipo, dia_semana, descripcion } = req.body;
+    db.prepare("INSERT INTO BloquesNoDisponibles (fecha, hora_inicio, hora_fin, tipo, dia_semana, descripcion) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(fecha || null, hora_inicio, hora_fin, tipo, dia_semana || null, descripcion || null);
     res.json({ success: true });
   });
 
@@ -485,9 +529,23 @@ async function startServer() {
           justificaciones: [],
           evidencias: [],
           fechas: new Set(),
-          completada: task.estado_ejecucion === 'terminada'
+          completada: task.estado_ejecucion === 'terminada',
+          logs: []
         };
       }
+
+      // Fetch logs for this specific task instance and add to the aggregate
+      const taskLogs = db.prepare("SELECT * FROM LogsTareas WHERE tarea_id = ? ORDER BY id ASC").all(task.id);
+      taskLogs.forEach((log: any) => {
+        grouped[key].logs.push({
+          fecha: task.fecha,
+          hora: log.fecha_hora, // O el comentario que ya tiene la hora formateada
+          estado_anterior: log.estado_anterior,
+          estado_nuevo: log.estado_nuevo,
+          comentario: log.comentario
+        });
+      });
+
 
       if (task.hallazgos && task.hallazgos.trim()) grouped[key].hallazgos.push({ fecha: task.fecha, text: task.hallazgos });
       if (task.justificacion && task.justificacion.trim()) grouped[key].justificaciones.push({ fecha: task.fecha, text: task.justificacion });

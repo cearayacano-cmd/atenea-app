@@ -861,12 +861,21 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
                           {item.area}
                         </span>
                       )}
-                      <span className="text-[10px] font-black text-text-muted uppercase tracking-wider">
-                        {item.status === 'despriorizado' ? 'DESPRIO' : 
+                      <span className={`text-[10px] font-black px-2 py-1 rounded-md border ${
+                        item.status === 'nuevo' ? 'bg-amber-50 border-amber-100 text-amber-600' :
+                        item.status === 'abierto' ? 'bg-red-50 border-red-100 text-red-600' :
+                        item.status === 'pendiente' ? 'bg-sky-50 border-sky-100 text-sky-500' :
+                        item.status === 'en espera' ? 'bg-slate-900 border-slate-900 text-white' :
+                        item.status === 'resuelto' || item.status === 'terminada' ? 'bg-slate-100 border-slate-200 text-slate-500' :
+                        item.status === 'despriorizado' ? 'bg-slate-50 border-slate-100 text-slate-400' :
+                        'bg-rose-50 border-rose-100 text-rose-700'
+                      }`}>
+                        {item.status === 'nuevo' ? 'NUEVO' :
+                         item.status === 'abierto' ? 'ABIERTO' :
+                         item.status === 'pendiente' ? 'PENDIENTE' : 
                          item.status === 'en espera' ? 'ESPERA' :
-                         item.status === 'en curso' ? 'CURSO' :
-                         item.status === 'en estudio' ? 'ESTUDIO' :
-                         item.status === 'terminada' ? 'LISTO' : item.status}
+                         item.status === 'resuelto' || item.status === 'terminada' ? 'RESUELTO' :
+                         item.status === 'despriorizado' ? 'DESPRIORIZADO' : 'FALLO'}
                       </span>
                     </div>
                     <p className="text-sm font-medium text-text-main leading-snug">
@@ -1099,6 +1108,17 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
                               {task.area}
                             </span>
                           )}
+                          <span className={`ml-2 px-2 py-1 rounded-md text-[9px] font-black border uppercase ${
+                            task.estado_ejecucion === 'nuevo' ? 'bg-amber-50 border-amber-100 text-amber-600' :
+                            task.estado_ejecucion === 'abierto' ? 'bg-red-50 border-red-100 text-red-600' :
+                            task.estado_ejecucion === 'pendiente' ? 'bg-sky-50 border-sky-100 text-sky-500' :
+                            task.estado_ejecucion === 'en espera' ? 'bg-slate-900 border-slate-900 text-white' :
+                            task.estado_ejecucion === 'resuelto' || task.estado_ejecucion === 'terminada' ? 'bg-slate-100 border-slate-200 text-slate-500' :
+                            task.estado_ejecucion === 'despriorizado' ? 'bg-slate-50 border-slate-100 text-slate-400' :
+                            'bg-rose-50 border-rose-100 text-rose-700'
+                          }`}>
+                            {task.estado_ejecucion || 'PENDIENTE'}
+                          </span>
                         </td>
                         <td className="p-4 font-medium text-text-strong">
                           {task.actividad}

@@ -23,7 +23,7 @@ interface Incidencia {
   tipo: string;
 }
 
-const EXECUTED_STATUSES = ['en espera', 'en curso', 'en estudio', 'terminada', 'despriorizada'];
+const EXECUTED_STATUSES = ['en espera', 'abierto', 'resuelto', 'terminada', 'despriorizada', 'fallo', 'fallido'];
 
 export default function DashboardView2({ selectedDate, setSelectedDate }: {
   selectedDate: string,
@@ -32,7 +32,15 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [loading, setLoading] = useState(true);
-  const [trend, setTrend] = useState<{ day: string, percentage: number }[]>([]);
+  const [trend, setTrend] = useState<{ 
+    day: string, 
+    percentage: number,
+    critico: number,
+    alto: number,
+    medio: number,
+    date: string
+  }[]>([]);
+  const [backlogDist, setBacklogDist] = useState({ critico: 0, alto: 0, medio: 0, total: 0 });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -44,32 +52,51 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
         const currentMonday = new Date(anchorDate);
         currentMonday.setDate(anchorDate.getDate() - dayOffset);
         
-        const days7 = [];
-        for (let i = 0; i < 7; i++) {
+        const days5 = [];
+        for (let i = 0; i < 5; i++) {
           const d = new Date(currentMonday);
           d.setDate(currentMonday.getDate() + i);
-          days7.push(d.toISOString().split('T')[0]);
+          days5.push(d.toISOString().split('T')[0]);
         }
 
         const results = await Promise.all(
-          days7.map(async (dateStr) => {
+          days5.map(async (dateStr) => {
             const tRes = await fetch(`/api/tareas?fecha=${dateStr}`);
             const tData = await tRes.json();
             const dayTasks: Task[] = tData.tasks || [];
-            const pTotal = dayTasks.reduce((acc, t) => acc + (Number(t.prioridad) || 0), 0);
-            const pCompletado = dayTasks.reduce((acc, t) => {
-              const isExecuted = t.estado_ejecucion && EXECUTED_STATUSES.includes(t.estado_ejecucion);
-              return acc + (isExecuted ? (Number(t.prioridad) || 0) : 0);
-            }, 0);
+            
+            let pTotal = 0;
+            let pCritico = 0;
+            let pAlto = 0;
+            let pMedio = 0;
+
+            dayTasks.forEach(t => {
+              const p = Number(t.prioridad) || 0;
+              pTotal += p;
+              
+              const status = (t.estado_ejecucion || 'nuevo').toLowerCase();
+              const isExecuted = !['nuevo', 'pendiente'].includes(status);
+              
+              if (isExecuted) {
+                if (p >= 10) pCritico += p;
+                else if (p >= 7) pAlto += p;
+                else pMedio += p;
+              }
+            });
+
             return {
-              day: new Date(dateStr + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'short' }),
-              percentage: pTotal > 0 ? Math.round((pCompletado / pTotal) * 100) : 0,
+              day: new Date(dateStr + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase(),
+              percentage: pTotal > 0 ? Math.round(((pCritico + pAlto + pMedio) / pTotal) * 100) : 0,
+              critico: pTotal > 0 ? Math.round((pCritico / pTotal) * 100) : 0,
+              alto: pTotal > 0 ? Math.round((pAlto / pTotal) * 100) : 0,
+              medio: pTotal > 0 ? Math.round((pMedio / pTotal) * 100) : 0,
               date: dateStr
             };
           })
         );
 
         setTrend(results);
+        
         const dayIdx = results.findIndex(r => r.date === selectedDate);
         if (dayIdx !== -1) {
           const res = await fetch(`/api/tareas?fecha=${selectedDate}`);
@@ -78,6 +105,19 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
           const iRes = await fetch(`/api/incidencias?fecha=${selectedDate}`);
           setIncidencias(await iRes.json());
         }
+
+        const bRes = await fetch('/api/backlog');
+        const bData = await bRes.json();
+        const dist = { critico: 0, alto: 0, medio: 0, total: 0 };
+        bData.forEach((t: any) => {
+          if (['pendiente', 'nuevo', 'abierto', 'en espera'].includes(t.status)) {
+            dist.total++;
+            if (t.prioridad >= 10) dist.critico++;
+            else if (t.prioridad >= 7) dist.alto++;
+            else dist.medio++;
+          }
+        });
+        setBacklogDist(dist);
       } catch (err) {
         console.error(err);
       } finally {
@@ -157,17 +197,19 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
   const porcentajeOperativo = Math.round((totalMinsOp / (8 * 60)) * 100);
 
   return (
-    <div className="space-y-10 pb-20 max-w-7xl mx-auto">
+    <div className="space-y-10 pb-20 w-full">
       {/* Header Premium */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <h2 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-             <BrainCircuit className="text-primary" size={40} />
-             Inteligencia Dashboard 2
-          </h2>
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">
-             Análisis Predictivo y Optimización de Jornada
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-primary/10 rounded-2xl text-primary">
+             <BrainCircuit size={28} />
+          </div>
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Dashboard de Inteligencia</h2>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">
+               Análisis Predictivo y Optimización de Jornada
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-4 bg-white p-3 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/50">
           <button onClick={() => {
@@ -198,14 +240,14 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
 
          <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/30 group hover:scale-[1.02] transition-all relative overflow-hidden">
             {/* Lógica de semáforo semanal */}
-            <div className={`absolute top-4 right-6 w-3 h-3 rounded-full blur-[2px] animate-pulse ${trend.reduce((acc, d) => acc + d.percentage, 0) / 7 >= 70 ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]'}`} />
+            <div className={`absolute top-4 right-6 w-3 h-3 rounded-full blur-[2px] animate-pulse ${trend.reduce((acc, d) => acc + d.percentage, 0) / 5 >= 70 ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]'}`} />
             <div className="flex items-center gap-3 mb-4">
                <div className="p-2 bg-slate-50 rounded-xl text-slate-400"><TrendingUp size={18} /></div>
                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lectura de la Semana</span>
             </div>
             <p className="text-sm font-black text-slate-800 leading-tight">
-               Semana con {trend.reduce((acc, d) => acc + d.percentage, 0) / 7 < 50 ? 'riesgo' : 'estabilidad'} estratégica.
-               <span className="block text-[10px] text-slate-400 mt-1">Promedio: {Math.round(trend.reduce((acc, d) => acc + d.percentage, 0) / 7)}%</span>
+               Semana con {trend.reduce((acc, d) => acc + d.percentage, 0) / 5 < 50 ? 'riesgo' : 'estabilidad'} estratégica.
+               <span className="block text-[10px] text-slate-400 mt-1">Promedio: {Math.round(trend.reduce((acc, d) => acc + d.percentage, 0) / 5)}%</span>
             </p>
          </div>
 
@@ -226,15 +268,15 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
         <motion.div 
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          className="lg:col-span-8 bg-[#0F004F] rounded-[56px] p-12 text-white relative overflow-hidden shadow-3xl shadow-slate-300"
+          className="lg:col-span-8 bg-white rounded-[56px] p-12 text-slate-900 relative overflow-hidden shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)] border border-slate-100"
         >
-          <div className="absolute top-0 right-0 w-96 h-96 bg-[#00D6CC]/20 rounded-full blur-[120px] -mr-48 -mt-48" />
+          <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-[120px] -mr-48 -mt-48" />
           
           <div className="relative z-10 space-y-12">
              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                   <div className="p-4 bg-white/10 rounded-3xl backdrop-blur-xl">
-                      <Gauge size={32} className="text-[#FFE017]" />
+                   <div className="p-4 bg-primary/10 rounded-3xl backdrop-blur-xl">
+                      <Gauge size={32} className="text-primary" />
                    </div>
                    <h3 className="text-2xl font-black tracking-tight">Estado de Carga Operativa</h3>
                 </div>
@@ -251,19 +293,19 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
                       <span className="text-xs font-black text-slate-500 uppercase tracking-widest block mt-4">Fuga Operativa Detectada</span>
                    </div>
                    <div className="flex flex-col justify-center gap-4">
-                      <div className="flex items-center gap-4 p-5 bg-white/5 rounded-3xl border border-white/5 group hover:bg-white/10 transition-all">
-                         <div className="p-2 bg-[#FFE017]/20 rounded-xl text-[#FFE017]"><Clock size={20} /></div>
+                      <div className="flex items-center gap-4 p-5 bg-slate-50 rounded-3xl border border-slate-100 group hover:bg-slate-100 transition-all">
+                         <div className="p-2 bg-[#FFE017]/20 rounded-xl text-amber-600"><Clock size={20} /></div>
                          <div>
-                            <p className="text-sm font-black text-white">{Math.floor(totalMinsOp / 60)}h {totalMinsOp % 60}m</p>
+                            <p className="text-sm font-black text-slate-900">{Math.floor(totalMinsOp / 60)}h {totalMinsOp % 60}m</p>
                             <p className="text-[10px] font-bold text-slate-400">Total en incidencias</p>
                          </div>
                       </div>
                    </div>
                    <div className="flex flex-col justify-center gap-4">
-                      <div className="flex items-center gap-4 p-5 bg-white/5 rounded-3xl border border-white/5">
-                         <div className="p-2 bg-primary/20 rounded-xl text-primary"><ShieldCheck size={20} /></div>
+                      <div className="flex items-center gap-4 p-5 bg-slate-50 rounded-3xl border border-slate-100">
+                         <div className="p-2 bg-primary/10 rounded-xl text-primary"><ShieldCheck size={20} /></div>
                          <div>
-                            <p className="text-sm font-black text-white">{100 - porcentajeOperativo}%</p>
+                            <p className="text-sm font-black text-slate-900">{100 - porcentajeOperativo}%</p>
                             <p className="text-[10px] font-bold text-slate-400">Capacidad de Foco</p>
                          </div>
                       </div>
@@ -271,13 +313,13 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
                 </div>
 
                 {/* Fila Inferior: Gráfico de Tendencia de ancho completo */}
-                <div className="bg-white/5 rounded-[40px] p-10 border border-white/5 flex flex-col">
+                <div className="bg-slate-50 rounded-[40px] p-10 border border-slate-100 flex flex-col">
                    <div className="flex items-center justify-between mb-10">
                       <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Tendencia de Ejecución Semanal</h4>
                       <div className="flex gap-8">
                          <div className="flex flex-col items-end">
                             <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Impacto Promedio</span>
-                            <span className="text-lg font-black text-white">{Math.round(trend.reduce((acc, d) => acc + d.percentage, 0) / 7)}%</span>
+                            <span className="text-lg font-black text-slate-900">{Math.round(trend.reduce((acc, d) => acc + d.percentage, 0) / 5)}%</span>
                          </div>
                          <div className="flex flex-col items-end">
                             <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Pérdida Acumulada</span>
@@ -286,26 +328,113 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
                       </div>
                    </div>
                    
-                   <div className="flex items-end justify-between gap-6 h-48">
-                      {trend.map((t, i) => (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-4 group">
-                           <div className="relative w-full flex items-end justify-center h-full">
-                              <span className="absolute -top-7 text-[10px] font-black text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">{t.percentage}%</span>
-                              <motion.div 
-                                initial={{ height: 0 }} 
-                                animate={{ height: `${t.percentage}%` }} 
-                                className={`w-full max-w-[60px] rounded-2xl transition-all duration-500 shadow-xl ${
-                                  t.percentage >= 80 ? 'bg-[#99CC33] shadow-[#99CC33]/20' : 'bg-slate-700'
-                                }`}
-                              />
-                           </div>
-                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t.day}</span>
-                        </div>
-                      ))}
-                   </div>
+                   <div className="flex items-end justify-between gap-6 h-64">
+                       {trend.map((t, i) => (
+                         <div key={i} className="flex-1 flex flex-col items-center gap-4 group cursor-help">
+                            <div className="relative w-full flex items-end justify-center h-52 bg-slate-100/50 rounded-3xl border border-slate-200/30 overflow-hidden mb-2 shadow-inner group-hover:bg-slate-100 transition-all">
+                               {/* Fondo de capacidad */}
+                               <div className="absolute inset-0 bg-slate-200/10 z-0" />
+                               
+                               {/* Barra Stacked por Prioridad */}
+                               <div 
+                                 style={{ height: `${Math.max(2, t.percentage)}%` }} 
+                                 className="w-full max-w-[54px] transition-all duration-1000 ease-out z-10 relative flex flex-col-reverse rounded-t-xl overflow-hidden shadow-2xl"
+                               >
+                                  {/* Segmento Medio/Bajo */}
+                                  <div 
+                                    style={{ height: `${(t.medio / t.percentage) * 100}%` }}
+                                    className="w-full bg-gradient-to-t from-slate-400 to-slate-300 flex items-center justify-center text-[8px] font-black text-white"
+                                  >
+                                    {t.medio > 10 && `${t.medio}%`}
+                                  </div>
+                                  {/* Segmento Alto */}
+                                  <div 
+                                    style={{ height: `${(t.alto / t.percentage) * 100}%` }}
+                                    className="w-full bg-gradient-to-t from-amber-500 to-amber-400 border-t border-white/20 flex items-center justify-center text-[8px] font-black text-white"
+                                  >
+                                    {t.alto > 10 && `${t.alto}%`}
+                                  </div>
+                                  {/* Segmento Crítico */}
+                                  <div 
+                                    style={{ height: `${(t.critico / t.percentage) * 100}%` }}
+                                    className="w-full bg-gradient-to-t from-red-600 to-red-500 border-t border-white/20 flex items-center justify-center text-[8px] font-black text-white"
+                                  >
+                                    {t.critico > 10 && `${t.critico}%`}
+                                  </div>
+                               </div>
+
+                               {/* Indicador de porcentaje total flotante */}
+                               <div className="absolute top-4 text-[10px] font-black text-slate-400 opacity-40">
+                                  {t.percentage}%
+                               </div>
+                            </div>
+                            <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">{t.day}</span>
+                         </div>
+                       ))}
+                    </div>
                 </div>
-             </div>
-          </div>
+              </div>
+
+              {/* Gráfico de Backlog por Prioridad */}
+              <div className="mt-12 bg-slate-50/30 rounded-[40px] p-10 border border-slate-100/50">
+                 <div className="flex items-center justify-between mb-8">
+                    <div>
+                       <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Distribución de Backlog Vivo</h4>
+                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Carga acumulada por nivel de criticidad</p>
+                    </div>
+                    <div className="px-4 py-2 bg-white rounded-2xl border border-slate-100 text-xs font-black text-primary">
+                       {backlogDist.total} TAREAS TOTALES
+                    </div>
+                 </div>
+
+                 <div className="flex items-end gap-1 w-full h-12 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 p-1">
+                    {backlogDist.critico > 0 && (
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(backlogDist.critico / backlogDist.total) * 100}%` }}
+                        className="h-full bg-gradient-to-r from-red-600 to-red-500 flex items-center justify-center text-[8px] font-black text-white relative group"
+                      >
+                        {Math.round((backlogDist.critico / backlogDist.total) * 100)}%
+                        <div className="absolute -top-8 bg-red-600 text-white px-2 py-1 rounded text-[8px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">CRÍTICO ({backlogDist.critico})</div>
+                      </motion.div>
+                    )}
+                    {backlogDist.alto > 0 && (
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(backlogDist.alto / backlogDist.total) * 100}%` }}
+                        className="h-full bg-gradient-to-r from-amber-500 to-amber-400 flex items-center justify-center text-[8px] font-black text-white relative group"
+                      >
+                        {Math.round((backlogDist.alto / backlogDist.total) * 100)}%
+                        <div className="absolute -top-8 bg-amber-500 text-white px-2 py-1 rounded text-[8px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">ALTO ({backlogDist.alto})</div>
+                      </motion.div>
+                    )}
+                    {backlogDist.medio > 0 && (
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(backlogDist.medio / backlogDist.total) * 100}%` }}
+                        className="h-full bg-gradient-to-r from-slate-400 to-slate-300 flex items-center justify-center text-[8px] font-black text-white relative group"
+                      >
+                        {Math.round((backlogDist.medio / backlogDist.total) * 100)}%
+                        <div className="absolute -top-8 bg-slate-500 text-white px-2 py-1 rounded text-[8px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">MEDIO/BAJO ({backlogDist.medio})</div>
+                      </motion.div>
+                    )}
+                 </div>
+                 <div className="flex justify-between mt-4">
+                    <div className="flex items-center gap-2">
+                       <div className="w-2 h-2 rounded-full bg-red-500" />
+                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Crítico</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <div className="w-2 h-2 rounded-full bg-amber-500" />
+                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Alto</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <div className="w-2 h-2 rounded-full bg-slate-300" />
+                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Medio/Bajo</span>
+                    </div>
+                 </div>
+              </div>
+           </div>
         </motion.div>
 
         {/* Sidebar Insights */}

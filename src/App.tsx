@@ -4,24 +4,19 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, Calendar, ListChecks, LayoutDashboard, Menu, X, History, BarChart3, ListTodo } from 'lucide-react';
+import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import HomeView from './components/HomeView';
-import ConfigView from './components/ConfigView';
 import ConfigView2 from './components/ConfigView2';
-import PlanningView from './components/PlanningView';
-import AgendaView from './components/AgendaView';
 import AgendaView2 from './components/AgendaView2';
-import DashboardView from './components/DashboardView';
 import DashboardView2 from './components/DashboardView2';
-import BacklogView from './components/BacklogView';
-import HistoryView from './components/HistoryView';
 import HistoryView2 from './components/HistoryView2';
+import logoLatam from './assets/logo_latam.png';
 
-type View = 'home' | 'config' | 'config2' | 'planning' | 'agenda' | 'agenda2' | 'dashboard' | 'dashboard2' | 'backlog' | 'history' | 'history2';
+type View = 'home' | 'config2' | 'agenda2' | 'dashboard2' | 'history2';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<View>('agenda2');
+  const [currentView, setCurrentView] = useState<View>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [user, setUser] = useState({ name: 'Cargando...', email: '', initials: '...' });
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -34,131 +29,130 @@ export default function App() {
   }, []);
 
   const navItems = [
-    // SECCIÓN CLÁSICA (ANTES)
-    { id: 'dashboard', label: 'Dashboard v1', icon: BarChart3 },
-    { id: 'planning', label: 'Planificación Clásica', icon: Calendar },
-    { id: 'agenda', label: 'Agenda del Día 1', icon: ListTodo },
-    { id: 'history', label: 'Historial v1', icon: History },
-    
-    { id: 'divider', label: '', icon: null, isDivider: true },
-
-    // SECCIÓN PRO (DESPUÉS)
+    { id: 'home', label: 'Inicio', icon: LayoutDashboard },
     { id: 'config2', label: 'Centro de Módulo', icon: Settings },
-    { id: 'agenda2', label: 'Agenda Pro (v2)', icon: ListTodo },
-    { id: 'dashboard2', label: 'Dashboard Pro (v2)', icon: BarChart3 },
-    { id: 'history2', label: 'Historial Pro (v2)', icon: History },
+    { id: 'agenda2', label: 'Agenda Pro', icon: ListTodo },
+    { id: 'dashboard2', label: 'Dashboard Pro', icon: BarChart3 },
+    { id: 'history2', label: 'Historial Pro', icon: History },
   ];
 
   return (
-    <div className="min-h-screen bg-bg-main text-text-strong flex font-sans">
-      {currentView === 'home' ? (
-        <HomeView onNavigate={(view) => setCurrentView(view as View)} />
-      ) : (
-        <>
-          {/* Sidebar */}
-          <aside 
-            className={`${
-              isSidebarOpen ? 'w-64' : 'w-20'
-            } bg-primary transition-all duration-300 flex flex-col`}
+    <div className="min-h-screen bg-[#F8F7FF] text-slate-800 flex overflow-hidden">
+      {/* Sidebar */}
+      <aside 
+        style={{ background: 'linear-gradient(180deg, #0f004f 0%, #0f004f 60%, #1b0088 100%)' }}
+        className={`${
+          isSidebarOpen ? 'w-72' : 'w-20'
+        } transition-all duration-300 flex flex-col relative z-20 shadow-2xl`}
+      >
+        <div className="p-8 flex items-center justify-between">
+          {isSidebarOpen && (
+            <motion.img 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              src={logoLatam}
+              alt="LATAM Logo"
+              className="h-10 w-auto cursor-pointer object-contain brightness-0 invert"
+              onClick={() => setCurrentView('home')}
+            />
+          )}
+          <button 
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 hover:bg-white/10 text-white rounded-lg transition-colors ml-auto"
           >
-            <div className="p-6 flex items-center justify-between">
-              {isSidebarOpen && (
-                <motion.h1 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-lg font-bold tracking-tight text-white cursor-pointer"
-                  onClick={() => setCurrentView('home')}
-                >
-                  Inteligencia <br /> Operativa
-                </motion.h1>
-              )}
-              <button 
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="p-2 hover:bg-primary-soft text-white rounded-lg transition-colors"
-              >
-                {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
-              </button>
-            </div>
+            {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
 
-            <nav className="flex-1 px-4 space-y-2">
-              {navItems.map((item, idx) => {
-                if (item.isDivider) {
-                  return <div key={`divider-${idx}`} className="my-6 border-t border-white/10 mx-2" />;
-                }
-                const Icon = item.icon;
-                if (!Icon) return null; // Seguridad extra
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setCurrentView(item.id as View)}
-                    className={`w-full flex items-center p-3 rounded-xl transition-all duration-300 relative group ${
-                      currentView === item.id 
-                        ? 'bg-white/10 text-white shadow-lg scale-[1.02]' 
-                        : 'text-white/60 hover:bg-white/5 hover:text-white hover:scale-[1.02]'
-                    }`}
-                  >
-                    {currentView === item.id && (
+        <nav className="flex-1 px-4 py-6 space-y-2">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentView === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setCurrentView(item.id as View)}
+                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 group relative ${
+                  isActive 
+                    ? 'bg-white/10 text-white shadow-lg' 
+                    : 'text-white/50 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Icon 
+                  size={22} 
+                  className={isActive ? 'text-white' : 'text-white/40 group-hover:text-white'} 
+                />
+                {isSidebarOpen && (
+                  <>
+                    <span className="font-semibold text-sm tracking-wide">{item.label}</span>
+                    {isActive && (
                       <motion.div 
-                        layoutId="active-indicator"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#99CC33] rounded-r-full"
+                        layoutId="activeDot"
+                        className="ml-auto w-1.5 h-1.5 bg-red-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.8)]" 
                       />
                     )}
-                    <Icon size={20} className={`${isSidebarOpen ? 'mr-3' : 'mx-auto'} transition-transform duration-300 group-hover:scale-110`} />
-                    {isSidebarOpen && <span className="font-medium">{item.label}</span>}
-                  </button>
-                );
-              })}
-            </nav>
-
-            <div className="p-6 border-t border-white/10">
-              <div className="flex items-center text-white">
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold uppercase">
-                  {user.initials}
-                </div>
-                {isSidebarOpen && (
-                  <div className="ml-3 overflow-hidden">
-                    <p className="text-sm font-medium truncate">{user.name}</p>
-                    <p className="text-xs text-white/60 truncate">{user.email}</p>
-                  </div>
+                  </>
                 )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User Profile Section at bottom */}
+        <div className="p-6 border-t border-white/5">
+          <div className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
+            <div className="relative">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-400 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                {user.initials}
               </div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-[#0A0B2E] rounded-full" />
             </div>
-          </aside>
+            {isSidebarOpen && (
+              <div className="flex-1 overflow-hidden">
+                <h4 className="text-white text-xs font-bold truncate">{user.name}</h4>
+                <p className="text-white/40 text-[10px] truncate">{user.email}</p>
+              </div>
+            )}
+            {isSidebarOpen && <Menu size={14} className="text-white/20 group-hover:text-white/50" />}
+          </div>
+        </div>
+      </aside>
 
-          {/* Main Content */}
-          <main className="flex-1 overflow-y-auto">
-            <header className="h-16 bg-white border-b border-border-soft flex items-center px-8 sticky top-0 z-10 shadow-sm">
-              <h2 className="text-xl font-bold text-primary">
-                {navItems.find(i => i.id === currentView)?.label}
-              </h2>
-            </header>
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto flex flex-col bg-[#F8F7FF]">
+        {/* View Container with Flexible Width */}
+        <div className={currentView === 'home' ? "min-h-screen" : "p-6 lg:p-10 w-full max-w-[1800px] mx-auto"}>
 
-            <div className="p-8 max-w-5xl mx-auto">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentView}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {currentView === 'config' && <ConfigView />}
-                  {currentView === 'config2' && <ConfigView2 />}
-                  {currentView === 'backlog' && <BacklogView />}
-                  {currentView === 'planning' && <PlanningView onNavigate={(v) => setCurrentView(v as View)} />}
-                  {currentView === 'agenda' && <AgendaView onNavigate={(v) => setCurrentView(v as View)} />}
-                  {currentView === 'agenda2' && <AgendaView2 onNavigate={(v) => setCurrentView(v as View)} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />}
-                  {currentView === 'history' && <HistoryView />}
-                  {currentView === 'history2' && <HistoryView2 />}
-                  {currentView === 'dashboard' && <DashboardView />}
-                  {currentView === 'dashboard2' && <DashboardView2 selectedDate={selectedDate} setSelectedDate={setSelectedDate} />}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </main>
-        </>
-      )}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentView}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+            >
+              {currentView === 'home' && (
+                <HomeView onNavigate={(view) => setCurrentView(view as View)} />
+              )}
+              {currentView === 'config2' && <ConfigView2 />}
+              {currentView === 'agenda2' && (
+                <AgendaView2 
+                  onNavigate={(v) => setCurrentView(v as View)} 
+                  selectedDate={selectedDate} 
+                  setSelectedDate={setSelectedDate} 
+                />
+              )}
+              {currentView === 'dashboard2' && (
+                <DashboardView2 
+                  selectedDate={selectedDate} 
+                  setSelectedDate={setSelectedDate} 
+                />
+              )}
+              {currentView === 'history2' && <HistoryView2 />}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </main>
     </div>
   );
 }
-

@@ -75,56 +75,66 @@ function TaskCard({ task, isClosed, updateTask, getFirstTime, onOpenDetails }: {
   getFirstTime: (timeStr: string | undefined) => string,
   onOpenDetails: (task: Task) => void
 }) {
-  const statusColors: Record<string, string> = {
-    'nuevo': 'text-cyan-500 bg-cyan-50',
-    'abierto': 'text-purple-500 bg-purple-50',
-    'pendiente': 'text-blue-500 bg-blue-50',
-    'en espera': 'text-amber-500 bg-amber-50',
-    'resuelto': 'text-emerald-500 bg-emerald-50',
-    'despriorizado': 'text-slate-500 bg-slate-50',
-    'fallido': 'text-red-500 bg-red-50'
+  const statusConfig: Record<string, { bg: string, border: string, text: string, accent: string, label: string }> = {
+    'nuevo': { bg: 'bg-white', border: 'border-slate-100', text: 'text-slate-700', accent: 'bg-slate-200', label: 'NUEVO' },
+    'abierto': { bg: 'bg-white', border: 'border-blue-100', text: 'text-slate-700', accent: 'bg-blue-400', label: 'ABIERTO' },
+    'pendiente': { bg: 'bg-sky-50/30', border: 'border-sky-100', text: 'text-slate-700', accent: 'bg-sky-400', label: 'PENDIENTE' },
+    'en espera': { bg: 'bg-amber-50/50', border: 'border-amber-100', text: 'text-slate-700', accent: 'bg-amber-400', label: 'EN ESPERA' },
+    'resuelto': { bg: 'bg-emerald-50/40', border: 'border-emerald-200', text: 'text-slate-400', accent: 'bg-emerald-500', label: 'RESUELTO' },
+    'terminada': { bg: 'bg-emerald-50/40', border: 'border-emerald-200', text: 'text-slate-400', accent: 'bg-emerald-500', label: 'RESUELTO' },
+    'despriorizado': { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-400', accent: 'bg-slate-300', label: 'DESPRIORIZADO' },
+    'fallido': { bg: 'bg-rose-50/50', border: 'border-rose-100', text: 'text-slate-700', accent: 'bg-rose-500', label: 'FALLO' },
+    'fallo': { bg: 'bg-rose-50/50', border: 'border-rose-100', text: 'text-slate-700', accent: 'bg-rose-500', label: 'FALLO' }
   };
+
+  const config = statusConfig[task.estado_ejecucion] || statusConfig['nuevo'];
+  const isDone = task.estado_ejecucion === 'resuelto' || task.estado_ejecucion === 'terminada';
 
   return (
     <motion.div 
       layout
-      className={`bg-white rounded-[24px] border border-slate-100 hover:border-primary/40 transition-all duration-300 shadow-sm hover:shadow-xl flex flex-col p-5 gap-4 relative group ${
-        task.estado_ejecucion === 'terminada' ? 'bg-emerald-50/5' : ''
-      }`}
+      className={`rounded-[24px] border ${config.border} ${config.bg} hover:shadow-xl transition-all duration-300 flex flex-col p-5 gap-4 relative group shadow-sm overflow-hidden`}
     >
-      <div className="flex items-start justify-between">
+      {/* Barra lateral de estado */}
+      <div className={`absolute top-0 left-0 w-1.5 h-full ${config.accent}`} />
+
+      <div className="flex items-start justify-between ml-1">
         <div className="flex flex-wrap gap-2">
           <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase text-white shadow-sm ${getPriorityInfo(task.prioridad).color}`}>
             {getPriorityInfo(task.prioridad).label}
           </span>
           {task.area && (
-            <span className="text-[8px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-lg uppercase border border-slate-200/50">{task.area}</span>
+            <span className="text-[8px] font-black text-slate-500 bg-white px-2 py-1 rounded-lg uppercase border border-slate-100 shadow-sm">{task.area}</span>
           )}
         </div>
-        <div className={`transition-all duration-500 ${task.estado_ejecucion === 'terminada' ? 'text-emerald-500 scale-110' : 'text-slate-200'}`}>
-          {task.estado_ejecucion === 'terminada' ? <CheckCircle2 size={20} /> : <Circle size={20} />}
+        <div className={`transition-all duration-500 ${isDone ? 'text-emerald-500 scale-110' : 'text-slate-200'}`}>
+          {isDone ? <CheckCircle2 size={20} /> : <Circle size={20} />}
         </div>
       </div>
 
-      <div className="flex-1 min-h-[44px]">
-        <h4 className={`text-[13px] font-black leading-tight line-clamp-2 transition-all ${task.estado_ejecucion === 'terminada' ? 'text-slate-300' : 'text-slate-700'}`}>
+      <div className="flex-1 min-h-[44px] ml-1 relative">
+        <h4 className={`text-[13px] font-black leading-tight line-clamp-2 transition-all ${isDone ? 'text-slate-400' : 'text-slate-700'}`}>
           {task.actividad}
         </h4>
+        {isDone && (
+          <div className="absolute -right-2 -bottom-2 opacity-10 pointer-events-none select-none">
+             <span className="text-4xl font-black text-emerald-500 rotate-[-12deg] block">DONE</span>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-50">
+      <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-50/50 ml-1">
         <div className="flex items-center gap-2">
-          <span className={`text-[9px] font-black px-2.5 py-1.5 rounded-xl uppercase tracking-tighter shadow-sm ${statusColors[task.estado_ejecucion] || 'text-slate-400 bg-slate-50'}`}>
-            {task.estado_ejecucion === 'nuevo' ? 'NUEVO' :
-             task.estado_ejecucion === 'abierto' ? 'ABIERTO' :
-             task.estado_ejecucion === 'pendiente' ? 'PENDIENTE' : 
-             task.estado_ejecucion === 'en espera' ? 'EN ESPERA' :
-             task.estado_ejecucion === 'resuelto' ? 'RESUELTO' :
-             task.estado_ejecucion === 'despriorizado' ? 'DESPRIORIZADO' :
-             task.estado_ejecucion === 'fallido' ? 'FALLIDO' : 'NUEVO'}
+          <span className={`text-[9px] font-black px-2.5 py-1.5 rounded-xl uppercase tracking-tighter shadow-sm border ${
+            task.estado_ejecucion === 'resuelto' || task.estado_ejecucion === 'terminada' ? 'bg-emerald-500 text-white border-emerald-600' :
+            task.estado_ejecucion === 'fallo' || task.estado_ejecucion === 'fallido' ? 'bg-rose-500 text-white border-rose-600' :
+            task.estado_ejecucion === 'en espera' ? 'bg-amber-400 text-white border-amber-500' :
+            'bg-white text-slate-500 border-slate-100'
+          }`}>
+            {config.label}
           </span>
           {task.hora_inicio_plan && (
-            <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg">
+            <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 bg-white/50 px-2 py-1 rounded-lg border border-slate-50">
               <Clock size={12} className="text-slate-300" /> {getFirstTime(task.hora_inicio_plan)}
             </div>
           )}
@@ -139,7 +149,9 @@ function TaskCard({ task, isClosed, updateTask, getFirstTime, onOpenDetails }: {
           
           <button 
             onClick={() => onOpenDetails(task)}
-            className="p-2.5 bg-slate-900 text-white hover:bg-primary transition-all rounded-2xl shadow-lg shadow-slate-200 hover:scale-110 active:scale-95"
+            className={`p-2.5 transition-all rounded-2xl shadow-lg hover:scale-110 active:scale-95 ${
+              isDone ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-slate-900 text-white shadow-slate-200'
+            }`}
           >
             <Plus size={18} />
           </button>
@@ -250,6 +262,36 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
   const isPast = new Date(selectedDate) < new Date(new Date().toISOString().split('T')[0]);
   const isClosed = plan?.estado_cierre === 1;
   const isExecutionStarted = plan?.ejecucion_iniciada === 1;
+
+  const calculateTimeInfo = () => {
+    const weights: Record<number, number> = { 10: 2, 7: 1.5, 4: 1, 2: 0.5 };
+    let usedHours = 0;
+    tasks.forEach(t => {
+      const baseHours = weights[t.prioridad] || 1;
+      const status = (t.estado_ejecucion || 'nuevo').toLowerCase();
+      
+      if (status === 'nuevo' || status === 'abierto') {
+        usedHours += baseHours; // Trabajo Activo o Planeado: 100% carga
+      } else if (status === 'en espera') {
+        usedHours += baseHours * 0.5; // Bloqueado: Libera el 50% para permitir rotación
+      } else if (status === 'resuelto') {
+        // Usa tiempo invertido si existe (convertido a horas), sino asume 30 min por defecto
+        usedHours += t.tiempo_invertido_minutos ? (t.tiempo_invertido_minutos / 60) : 0.5; 
+      }
+      // Despriorizado y Fallido consumen 0 horas
+    });
+
+    const availableHours = plan?.horas_efectivas || 8.0;
+
+    return { 
+      usedHours, 
+      availableHours, 
+      remainingHours: Math.max(0, availableHours - usedHours),
+      percentage: Math.min(100, (usedHours / availableHours) * 100)
+    };
+  };
+
+  const timeInfo = calculateTimeInfo();
 
   useEffect(() => {
     fetchData();
@@ -580,11 +622,11 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
         <div className="flex flex-col md:flex-row md:items-center gap-8">
            <div className="flex items-center gap-4">
               <div className="p-3 bg-primary/10 rounded-2xl text-primary">
-                 <CalendarIcon size={24} />
+                 <CalendarIcon size={28} />
               </div>
               <div>
-                 <h1 className="text-2xl font-black text-slate-800 tracking-tight leading-none mb-1">Agenda de Operaciones</h1>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                 <h2 className="text-3xl font-black text-slate-900 tracking-tight">Agenda de Operaciones</h2>
+                 <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">
                     {new Date(selectedDate).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
                  </p>
               </div>
@@ -617,6 +659,12 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
             onChange={(e) => setSelectedDate(e.target.value)}
             className="p-3 rounded-xl border-none outline-none focus:ring-0 text-sm font-black text-slate-700 bg-slate-50"
           />
+          <button 
+            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            className="mr-2 px-3 py-1.5 bg-primary text-white text-[9px] font-black rounded-lg hover:bg-primary-soft transition-all uppercase tracking-widest shadow-sm"
+          >
+            Hoy
+          </button>
         </div>
       </div>
 
@@ -642,6 +690,16 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                 <span className="text-4xl font-black text-primary">{porcentajeEstrategico}%</span>
               </div>
               <div className="h-10 w-px bg-slate-100 hidden md:block" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tanque de Energía</span>
+                <div className="flex items-baseline gap-1">
+                  <span className={`text-2xl font-black ${timeInfo.remainingHours > 1 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                    {timeInfo.remainingHours.toFixed(1)}h
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">libres</span>
+                </div>
+              </div>
+              <div className="h-10 w-px bg-slate-100 hidden md:block" />
               <div className="flex gap-4">
                 <div className="flex flex-col">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Críticas</span>
@@ -654,17 +712,22 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
               </div>
             </div>
 
-            <div className="flex-1 max-w-md w-full">
-               <div className="w-full bg-slate-50 h-3 rounded-full overflow-hidden flex p-0.5 shadow-inner">
+            <div className="flex-1 max-w-sm w-full space-y-3">
+               <div className="w-full bg-slate-50 h-4 rounded-full overflow-hidden flex p-1 shadow-inner border border-slate-100">
                   <motion.div 
                     initial={{ width: 0 }}
-                    animate={{ width: `${porcentajeEstrategico}%` }}
-                    className={`${strategicStatus.bar} h-full rounded-full bar-glow`}
+                    animate={{ width: `${timeInfo.percentage}%` }}
+                    className={`h-full rounded-full transition-all duration-500 ${timeInfo.percentage > 90 ? 'bg-red-500' : timeInfo.percentage > 70 ? 'bg-amber-500' : 'bg-emerald-500'} shadow-[0_0_10px_rgba(0,0,0,0.1)]`}
                   />
                </div>
-               <p className={`text-[10px] font-black mt-2 ${strategicStatus.color} uppercase tracking-widest flex items-center gap-2`}>
-                  {strategicStatus.icon} {strategicStatus.text}
-               </p>
+               <div className="flex justify-between items-center">
+                  <p className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-2 ${timeInfo.percentage > 90 ? 'text-red-500' : 'text-slate-400'}`}>
+                     <Zap size={10} /> Capacidad Utilizada: {timeInfo.percentage.toFixed(0)}%
+                  </p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                     Meta: {timeInfo.availableHours}h
+                  </p>
+               </div>
             </div>
 
             <div className="flex items-center gap-3">
@@ -751,9 +814,17 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
               {/* Bitácora Detallada tipo Excel (Light) */}
               <div className="space-y-6">
                  <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                    <h4 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Bitácora Detallada de Ejecución</h4>
-                    <div className="px-4 py-1.5 bg-slate-50 rounded-full border border-slate-200 text-[9px] font-black text-slate-500">
-                       EXPORTACIÓN VISUAL
+                    <div className="flex flex-col">
+                       <h4 className="text-sm font-black uppercase tracking-[0.2em] text-slate-700">Bitácora de Ejecución del Día</h4>
+                       <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Reporte dinámico de actividades gestionadas hoy</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                       <div className="px-4 py-1.5 bg-emerald-50 rounded-full border border-emerald-100 text-[9px] font-black text-emerald-600">
+                          {tasks.filter(t => t.estado_ejecucion === 'resuelto' || t.estado_ejecucion === 'terminada').length} COMPLETADAS
+                       </div>
+                       <div className="px-4 py-1.5 bg-slate-50 rounded-full border border-slate-200 text-[9px] font-black text-slate-500">
+                          EXPORTACIÓN VISUAL
+                       </div>
                     </div>
                  </div>
                  
@@ -769,12 +840,21 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                           </tr>
                        </thead>
                        <tbody>
-                          {tasks.map((task) => (
-                             <tr key={task.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group">
-                                <td className="py-5 px-4">
-                                   <p className="text-xs font-black text-slate-700 group-hover:text-primary transition-colors">{task.actividad}</p>
-                                   <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">ID: #{task.id}</p>
-                                </td>
+                          {tasks.map((task) => {
+                              const isRollover = task.actividad.toLowerCase().includes('dia 2026') || task.actividad.toLowerCase().includes('ayer');
+                              const displayActivity = task.actividad.split(' - Dia')[0]; 
+                              
+                              return (
+                              <tr key={task.id} className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors group ${task.estado_ejecucion === 'nuevo' ? 'opacity-50 grayscale' : ''}`}>
+                                 <td className="py-5 px-4">
+                                    <div className="flex items-center gap-2 mb-1">
+                                       <p className="text-xs font-black text-slate-700 group-hover:text-primary transition-colors">{displayActivity}</p>
+                                       {isRollover && (
+                                          <span className="text-[7px] font-black px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-md">ARRASTRE</span>
+                                       )}
+                                    </div>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase">ID: #{task.id} {isRollover ? '• Origen Histórico' : '• Nueva de Hoy'}</p>
+                                 </td>
                                 <td className="py-5 px-4 text-center">
                                    <span className={`text-[9px] font-black px-2 py-1 rounded-md ${
                                       task.prioridad >= 10 ? 'bg-red-50 text-red-500 border border-red-100' :
@@ -785,12 +865,15 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                                    </span>
                                 </td>
                                 <td className="py-5 px-4 text-center">
-                                   <span className={`text-[9px] font-black px-2 py-1 rounded-md ${
-                                      task.estado_ejecucion === 'terminada' || task.estado_ejecucion === 'resuelto' ? 'bg-emerald-50 border border-emerald-100 text-emerald-600' :
-                                      task.estado_ejecucion === 'despriorizado' ? 'bg-slate-100 border border-slate-200 text-slate-500' :
-                                      task.estado_ejecucion === 'abierto' ? 'bg-purple-50 border border-purple-100 text-purple-600' :
-                                      task.estado_ejecucion === 'fallido' ? 'bg-red-50 border border-red-100 text-red-600' :
-                                      'bg-blue-50 border border-blue-100 text-blue-600'
+                                   <span className={`text-[9px] font-black px-2 py-1 rounded-md border ${
+                                      task.estado_ejecucion === 'nuevo' ? 'bg-amber-50 border-amber-100 text-amber-600' :
+                                      task.estado_ejecucion === 'abierto' ? 'bg-red-50 border-red-100 text-red-600' :
+                                      task.estado_ejecucion === 'pendiente' ? 'bg-sky-50 border-sky-100 text-sky-500' :
+                                      task.estado_ejecucion === 'en espera' ? 'bg-slate-900 border-slate-900 text-white' :
+                                      task.estado_ejecucion === 'resuelto' || task.estado_ejecucion === 'terminada' ? 'bg-slate-100 border-slate-200 text-slate-500' :
+                                      task.estado_ejecucion === 'despriorizado' ? 'bg-slate-50 border-slate-100 text-slate-400' :
+                                      task.estado_ejecucion === 'fallido' || task.estado_ejecucion === 'fallo' ? 'bg-rose-50 border-rose-100 text-rose-700' :
+                                      'bg-slate-50 border-slate-200 text-slate-400'
                                    }`}>
                                       {task.estado_ejecucion?.toUpperCase() || 'PENDIENTE'}
                                    </span>
@@ -806,7 +889,8 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                                    </p>
                                 </td>
                              </tr>
-                          ))}
+                           );
+                        })}
                        </tbody>
                     </table>
                  </div>
@@ -896,21 +980,47 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
               <div className="space-y-3">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Clock size={14} /> Estado de Ejecución</label>
                 <div className="flex bg-slate-100/50 p-1.5 rounded-2xl border border-slate-100 gap-1.5 flex-wrap">
-                  {[{ id: 'nuevo', label: 'NUEVO', color: 'bg-cyan-500' }, { id: 'abierto', label: 'ABIERTO', color: 'bg-purple-500' }, { id: 'pendiente', label: 'PENDIENTE', color: 'bg-blue-500' }, { id: 'en espera', label: 'EN ESPERA', color: 'bg-amber-500' }, { id: 'resuelto', label: 'RESUELTO', color: 'bg-emerald-500' }, { id: 'despriorizado', label: 'DESPRIORIZADO', color: 'bg-slate-500' }, { id: 'fallido', label: 'FALLIDO', color: 'bg-red-500' }].map((state) => (
-                    <button key={state.id} disabled={isClosed} onClick={() => { 
-                      const isDone = state.id === 'resuelto'; 
-                      let tInvertido = editingTask.tiempo_invertido_minutos;
-                      if (isDone) {
-                        const input = window.prompt('¿Cuánto tiempo real invertiste en esta tarea? (en minutos)', String(tInvertido || 30));
-                        if (input !== null) {
-                          tInvertido = parseInt(input, 10) || 30;
-                        }
-                      }
-                      updateTask(editingTask.id, { estado_ejecucion: state.id, completada: isDone, tiempo_invertido_minutos: tInvertido }); 
-                      setEditingTask({...editingTask, estado_ejecucion: state.id, completada: isDone, tiempo_invertido_minutos: tInvertido}); 
-                    }} className={`text-[9px] font-black px-4 py-2.5 rounded-xl transition-all ${editingTask.estado_ejecucion === state.id ? `${state.color} text-white shadow-lg scale-105 ring-2 ring-offset-2 ring-current/20` : 'bg-white text-slate-400 hover:text-slate-600 border border-slate-200/50'}`}>{state.label}</button>
+                  {[{ id: 'nuevo', label: 'NUEVO', color: 'bg-cyan-500' }, { id: 'abierto', label: 'ABIERTO', color: 'bg-purple-500' }, { id: 'pendiente', label: 'PENDIENTE', color: 'bg-blue-500' }, { id: 'en espera', label: 'EN ESPERA', color: 'bg-amber-500' }, { id: 'resuelto', label: 'RESUELTO', color: 'bg-emerald-500' }, { id: 'despriorizado', label: 'DESPRIORIZADO', color: 'bg-slate-500' }, { id: 'fallo', label: 'FALLO', color: 'bg-red-500' }].map((state) => (
+                    <button 
+                      key={state.id} 
+                      disabled={isClosed} 
+                      onClick={() => { 
+                        const isDone = state.id === 'resuelto'; 
+                        updateTask(editingTask.id, { estado_ejecucion: state.id, completada: isDone }); 
+                        setEditingTask({...editingTask, estado_ejecucion: state.id, completada: isDone}); 
+                      }} 
+                      className={`text-[9px] font-black px-4 py-2.5 rounded-xl transition-all ${editingTask.estado_ejecucion === state.id ? `${state.color} text-white shadow-lg scale-105 ring-2 ring-offset-2 ring-current/20` : 'bg-white text-slate-400 hover:text-slate-600 border border-slate-200/50'}`}
+                    >
+                      {state.label}
+                    </button>
                   ))}
                 </div>
+                {editingTask.estado_ejecucion === 'resuelto' && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-4 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3 text-emerald-700">
+                      <Clock size={18} />
+                      <span className="text-xs font-black uppercase tracking-widest">¿Cuánto tiempo real invertiste?</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="number"
+                        value={editingTask.tiempo_invertido_minutos || ''}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10) || 0;
+                          setEditingTask({...editingTask, tiempo_invertido_minutos: val});
+                          updateTask(editingTask.id, { tiempo_invertido_minutos: val });
+                        }}
+                        className="w-20 p-2 rounded-xl border border-emerald-200 outline-none focus:ring-2 focus:ring-emerald-500 text-center font-black text-slate-700 text-sm"
+                        placeholder="min"
+                      />
+                      <span className="text-[10px] font-black text-emerald-600 uppercase">minutos</span>
+                    </div>
+                  </motion.div>
+                )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-3">

@@ -40,7 +40,7 @@ export default function ConfigView2() {
   // Bloques y Jornadas
   const [bloques, setBloques] = useState<Bloque[]>([]);
   const [dailyPlans, setDailyPlans] = useState<Record<string, any>>({});
-  const [newBlock, setNewBlock] = useState({ isRecurrente: false, dias: [] as string[], fecha: new Date().toISOString().split('T')[0], inicio: '13:00', fin: '14:00', tipo: 'Almuerzo' });
+  const [newBlock, setNewBlock] = useState({ isRecurrente: false, dias: [] as string[], fecha: new Date().toISOString().split('T')[0], inicio: '13:00', fin: '14:00', tipo: 'Almuerzo', motivo: '' });
 
   // Backlog
   const [backlog, setBacklog] = useState<BacklogItem[]>([]);
@@ -162,7 +162,7 @@ export default function ConfigView2() {
       const plans: Record<string, any> = {};
       if (Array.isArray(data)) {
         data.forEach(d => {
-          plans[d.date] = { start: d.hora_inicio, end: d.hora_fin };
+          plans[d.date] = { hora_inicio: d.hora_inicio, hora_fin: d.hora_fin };
         });
       }
       setDailyPlans(plans);
@@ -205,6 +205,13 @@ export default function ConfigView2() {
     const task = backlog.find(t => t.id === Number(taskId));
     if (!task) return;
 
+    // Check capacity before adding (Simplified check for the card drop)
+    const { remainingHours } = calculateTimeInfo();
+    if (remainingHours <= 0) {
+       const proceed = window.confirm("⚠️ CAPACIDAD ALCANZADA: La jornada de este día ya está llena. ¿Deseas forzar la carga de esta tarea?");
+       if (!proceed) return;
+    }
+
     try {
       // Crear tarea para ese día
       await fetch('/api/tareas', {
@@ -214,6 +221,7 @@ export default function ConfigView2() {
           fecha: dateStr,
           actividad: task.actividad,
           prioridad: task.prioridad,
+          estado_ejecucion: 'nuevo', // Siempre nace como NUEVO al planificar
           tiempo_asignado_minutos: 0,
           backlog_id: task.id,
           area: task.area
@@ -312,17 +320,17 @@ export default function ConfigView2() {
         await fetch('/api/bloques', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dia_semana: dia, hora_inicio: newBlock.inicio, hora_fin: newBlock.fin, tipo: newBlock.tipo }),
+          body: JSON.stringify({ dia_semana: dia, hora_inicio: newBlock.inicio, hora_fin: newBlock.fin, tipo: newBlock.tipo, descripcion: newBlock.motivo }),
         });
       }
     } else {
       await fetch('/api/bloques', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha: newBlock.fecha, hora_inicio: newBlock.inicio, hora_fin: newBlock.fin, tipo: newBlock.tipo }),
+        body: JSON.stringify({ fecha: newBlock.fecha, hora_inicio: newBlock.inicio, hora_fin: newBlock.fin, tipo: newBlock.tipo, descripcion: newBlock.motivo }),
       });
     }
-    setNewBlock({ ...newBlock, dias: [] });
+    setNewBlock({ ...newBlock, dias: [], motivo: '' });
     fetchBloques();
   };
 
@@ -357,6 +365,17 @@ export default function ConfigView2() {
 
   const handleAssignToDayFromModal = async (task: any) => {
     if (!selectedPlanningDate) return;
+    
+    // Check capacity before adding
+    const weights: Record<number, number> = { 10: 2, 7: 1.5, 4: 1, 2: 0.5 };
+    const taskWeight = weights[task.prioridad] || 1;
+    const { remainingHours } = calculateTimeInfo();
+
+    if (remainingHours - taskWeight < 0) {
+      const proceed = window.confirm("⚠️ CAPACIDAD ALCANZADA: Esta tarea superará tu jornada operativa. ¿Deseas agregarla de todas formas?");
+      if (!proceed) return;
+    }
+
     try {
       await fetch('/api/tareas', {
         method: 'POST',
@@ -410,15 +429,15 @@ export default function ConfigView2() {
       const baseHours = weights[t.prioridad] || 1;
       const status = (t.estado_ejecucion || 'nuevo').toLowerCase();
       
-      if (status === 'nuevo' || status === 'pendiente') {
-        usedHours += baseHours;
-      } else if (status === 'abierto') {
-        usedHours += baseHours * 0.5; // Abierto consume la mitad del tiempo asignado
+      if (status === 'nuevo' || status === 'abierto') {
+        usedHours += baseHours; // Nuevo y Abierto consumen el 100%
+      } else if (status === 'en espera') {
+        usedHours += baseHours * 0.5; // En Espera libera el 50% de la carga
       } else if (status === 'resuelto') {
         // Usa tiempo invertido si existe (convertido a horas), sino asume 30 min por defecto
         usedHours += t.tiempo_invertido_minutos ? (t.tiempo_invertido_minutos / 60) : 0.5; 
       }
-      // En espera, despriorizado, fallido consumen 0 horas
+      // Despriorizado y Fallido consumen 0 horas
     });
 
     const safeStart = startTime || '08:00';
@@ -426,6 +445,16 @@ export default function ConfigView2() {
     const [startH, startM] = safeStart.split(':').map(Number);
     const [endH, endM] = safeEnd.split(':').map(Number);
     let availableHours = (endH + (endM || 0) / 60) - (startH + (startM || 0) / 60);
+
+    // Descontar Almuerzo si existe
+    const almuerzoBlocks = bloques.filter(b => b.tipo === 'Almuerzo');
+    almuerzoBlocks.forEach(b => {
+      const [bStartH, bStartM] = b.hora_inicio.split(':').map(Number);
+      const [bEndH, bEndM] = b.hora_fin.split(':').map(Number);
+      const duration = (bEndH + bEndM / 60) - (bStartH + bStartM / 60);
+      availableHours -= duration;
+    });
+
     if (isNaN(availableHours) || availableHours < 0) availableHours = 8.0;
 
     return { 
@@ -488,7 +517,7 @@ export default function ConfigView2() {
                       <option value="en espera">EN ESPERA</option>
                       <option value="resuelto">RESUELTO</option>
                       <option value="despriorizado">DESPRIORIZADO</option>
-                      <option value="fallido">FALLIDO</option>
+                      <option value="fallo">FALLO</option>
                     </select>
                   </div>
                 </div>
@@ -540,14 +569,6 @@ export default function ConfigView2() {
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha Hasta</label>
                     <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
-                  </div>
-                </div>
-                 <div className="space-y-4">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Presets de Turno</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button onClick={() => { setStartTime('08:00'); setEndTime('17:00'); handleSaveConfig('08:00', '17:00'); setIsJornadaModalOpen(false); }} className="p-2 bg-slate-50 border border-slate-100 rounded-xl text-[9px] font-black text-primary hover:bg-primary hover:text-white transition-all">☀️ MAÑANA</button>
-                    <button onClick={() => { setStartTime('14:00'); setEndTime('23:00'); handleSaveConfig('14:00', '23:00'); setIsJornadaModalOpen(false); }} className="p-2 bg-slate-50 border border-slate-100 rounded-xl text-[9px] font-black text-primary hover:bg-primary hover:text-white transition-all">🌆 TARDE</button>
-                    <button onClick={() => { setStartTime('22:00'); setEndTime('07:00'); handleSaveConfig('22:00', '07:00'); setIsJornadaModalOpen(false); }} className="p-2 bg-slate-50 border border-slate-100 rounded-xl text-[9px] font-black text-primary hover:bg-primary hover:text-white transition-all">🌙 NOCHE</button>
                   </div>
                 </div>
 
@@ -618,6 +639,20 @@ export default function ConfigView2() {
                       {TIPOS_BLOQUE.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
+
+                  {newBlock.tipo === 'Otro' && (
+                    <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Especifique el motivo</label>
+                      <input 
+                        type="text" 
+                        placeholder="¿Por qué esta excepción?"
+                        value={newBlock.motivo}
+                        onChange={e => setNewBlock({...newBlock, motivo: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-accent"
+                        required
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <button 
@@ -698,7 +733,7 @@ export default function ConfigView2() {
       <AnimatePresence>
         {isPlanningModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col overflow-hidden border border-white/20">
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden border border-white/20">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-primary text-white">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-md">
@@ -716,8 +751,12 @@ export default function ConfigView2() {
 
               <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
                 {/* Sugerencia de Inicio (Global para el modal) */}
-                <div className="px-6 py-4 bg-[#7DA81A]/5 border-b border-[#7DA81A]/10 flex items-start gap-4">
-                  <div className="p-2 bg-[#7DA81A]/10 rounded-lg text-[#7DA81A]">
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="px-6 py-4 bg-[#7DA81A]/5 border-b border-[#7DA81A]/10 flex items-start gap-4"
+                >
+                  <div className="p-2 bg-[#7DA81A]/10 rounded-lg text-[#7DA81A] animate-pulse">
                     <span className="text-sm">⚡</span>
                   </div>
                   <div>
@@ -728,7 +767,7 @@ export default function ConfigView2() {
                       {dayStartSuggestion}
                     </p>
                   </div>
-                </div>
+                </motion.div>
 
                 <div className="flex-1 flex overflow-hidden">
                 {/* 1. Panel Izquierdo: Backlog Disponible */}
@@ -879,7 +918,7 @@ export default function ConfigView2() {
                 </div>
 
                 {/* 3. Panel Derecho: IA y Resumen de Tiempo */}
-                <div className="w-[320px] bg-white border-l border-slate-100 flex flex-col">
+                <div className="w-[320px] bg-white border-l border-slate-100 flex flex-col overflow-y-auto custom-scrollbar">
                   {/* Resumen de Tiempo */}
                   <div className="p-6 border-b border-slate-100 bg-slate-50/50">
                     <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-5 flex items-center gap-2"><Clock size={14}/> Resumen de Tiempos</h5>
@@ -953,68 +992,68 @@ export default function ConfigView2() {
           </div>
         )}
       </AnimatePresence>
-
-      {/* 1. CALENDARIO SEMANAL L-V */}
-      <div className="latam-card !p-6 bg-white border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-50">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                <Calendar size={18} />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Visualización Semanal Operativa</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Distribución de Jornada y Excepciones (L-V)</p>
-              </div>
-            </div>
-
-            {/* Selector de Semana */}
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-2">
-               <button onClick={() => setWeekOffset(prev => prev - 1)} className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm text-slate-400 hover:text-primary transition-all">
-                  <ArrowRight size={14} className="rotate-180" />
-               </button>
-               <div className="px-4 py-1 flex flex-col items-center min-w-[100px]">
-                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Semana</span>
-                  <span className="text-[12px] font-black text-primary uppercase">#{currentWeekNumber}</span>
-               </div>
-               <button onClick={() => setWeekOffset(prev => prev + 1)} className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm text-slate-400 hover:text-primary transition-all">
-                  <ArrowRight size={14} />
-               </button>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {/* Botón Compacto Jornada */}
-            <button 
-              onClick={() => setIsJornadaModalOpen(true)}
-              className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl hover:border-primary/40 hover:bg-white transition-all flex items-center gap-2 group"
-            >
-              <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all">
-                <Clock size={14} />
-              </div>
-              <div className="flex flex-col items-start">
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Jornada</span>
-                <span className="text-[9px] font-black text-slate-700">{startTime} - {endTime}</span>
-              </div>
-            </button>
-
-            {/* Botón Compacto Excepción */}
-            <button 
-              onClick={() => setIsExcepcionModalOpen(true)}
-              className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl hover:border-accent/40 hover:bg-white transition-all flex items-center gap-2 group"
-            >
-              <div className="w-6 h-6 rounded-lg bg-accent/10 flex items-center justify-center text-accent group-hover:bg-accent group-hover:text-white transition-all">
-                <Plus size={14} />
-              </div>
-              <div className="flex flex-col items-start">
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Añadir</span>
-                <span className="text-[9px] font-black text-slate-700 uppercase">Excepción</span>
-              </div>
-            </button>
-          </div>
+      <>
+      {/* 1. CALENDARIO SEMANAL L-V Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-4">
+             <div className="p-3 bg-primary/10 rounded-2xl text-primary">
+                <Calendar size={28} />
+             </div>
+             <div>
+                Visualización Semanal Operativa
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">
+                   Distribución de Jornada y Excepciones (L-V)
+                </p>
+             </div>
+          </h2>
         </div>
-        
+      </div>
+
+      <div className="latam-card !p-8 bg-white border border-slate-100 shadow-2xl shadow-slate-200/40 rounded-[40px]">
+        <div className="flex flex-col md:flex-row justify-start items-center gap-4 mb-8 pb-6 border-b border-slate-50">
+          <div className="flex items-center bg-slate-50 p-1 rounded-2xl gap-2">
+             <button onClick={() => setWeekOffset(prev => prev - 1)} className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-sm text-slate-400 hover:text-primary transition-all">
+                <ArrowRight size={18} className="rotate-180" />
+             </button>
+             <div className="px-6 py-1 flex flex-col items-center min-w-[120px]">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Semana</span>
+                <span className="text-sm font-black text-primary uppercase">#{currentWeekNumber}</span>
+             </div>
+             <button onClick={() => setWeekOffset(prev => prev + 1)} className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-sm text-slate-400 hover:text-primary transition-all">
+                <ArrowRight size={18} />
+             </button>
+          </div>
+
+          <div className="h-10 w-px bg-slate-100 mx-2 hidden md:block" />
+
+          {/* Botón Compacto Jornada */}
+          <button 
+            onClick={() => setIsJornadaModalOpen(true)}
+            className="px-5 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl hover:border-primary/40 hover:bg-white transition-all flex items-center gap-3 group"
+          >
+            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all">
+              <Clock size={16} />
+            </div>
+            <div className="flex flex-col items-start">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-1">Jornada</span>
+              <span className="text-xs font-black text-slate-800">{startTime} - {endTime}</span>
+            </div>
+          </button>
+
+          <button 
+            onClick={() => {
+              setIsExcepcionModalOpen(true);
+            }}
+            className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-lg flex items-center gap-2"
+          >
+            <Plus size={16} /> Añadir Excepción
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+
+
           {weekDates.map((date, index) => {
             const diaNombre = DIAS[index];
             const dateStr = date.toISOString().split('T')[0];
@@ -1050,60 +1089,79 @@ export default function ConfigView2() {
                 
                 <div className="p-4 space-y-5">
                    <div 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setStartDate(dateStr);
-                      setEndDate(dateStr);
-                      setStartTime(dailyPlans[dateStr]?.start || '08:00');
-                      setEndTime(dailyPlans[dateStr]?.end || '17:00');
-                      setIsJornadaModalOpen(true);
-                    }}
-                    className={`relative pl-3 border-l-2 hover:bg-primary/5 transition-all rounded-r-lg p-1 ${isToday ? 'border-primary' : 'border-primary/20'}`}
-                  >
-                    <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Jornada Base</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Clock size={10} className={isToday ? 'text-primary' : 'text-primary/60'} />
-                      <span className="text-[10px] font-black text-slate-700">
-                        {dailyPlans[dateStr]?.start || '08:00'} - {dailyPlans[dateStr]?.end || '17:00'}
-                      </span>
-                    </div>
-                  </div>
+                     onClick={(e) => {
+                       e.stopPropagation();
+                       setStartDate(dateStr);
+                       setEndDate(dateStr);
+                       const plan = dailyPlans[dateStr];
+                       setStartTime(plan?.hora_inicio || '08:00');
+                       setEndTime(plan?.hora_fin || '17:00');
+                       setIsJornadaModalOpen(true);
+                     }}
+                     className={`relative pl-3 border-l-2 hover:bg-primary/5 transition-all rounded-r-lg p-2 cursor-pointer group/jornada ${isToday ? 'border-primary bg-primary/5' : 'border-primary/20'}`}
+                   >
+                     <div className="flex items-center justify-between">
+                       <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Jornada Base</span>
+                       <div className="opacity-0 group-hover/jornada:opacity-100 transition-opacity">
+                         <Save size={8} className="text-primary" />
+                       </div>
+                     </div>
+                     <div className="flex items-center gap-2 mt-1">
+                       <Clock size={10} className={isToday ? 'text-primary' : 'text-primary/60'} />
+                       <span className="text-[10px] font-black text-slate-700">
+                         {dailyPlans[dateStr]?.hora_inicio || '08:00'} - {dailyPlans[dateStr]?.hora_fin || '17:00'}
+                       </span>
+                     </div>
+                   </div>
 
-                  {/* Excepciones */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Excepciones</span>
-                      <span className="text-[7px] font-black text-primary/40 uppercase">{dayBlocks.length}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {dayBlocks.length > 0 ? (
-                        dayBlocks.map(b => (
-                          <div key={b.id} className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-1.5 group/item relative hover:border-accent/30 transition-all">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-accent" />
-                                <span className="text-[8px] font-black text-slate-700 uppercase">{b.tipo}</span>
-                              </div>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); deleteBloque(b.id); }} 
-                                className="opacity-0 group-hover/item:opacity-100 text-slate-300 hover:text-red-500 transition-all p-1"
-                              >
-                                <Trash2 size={10} />
-                              </button>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Clock size={9} className="text-slate-400" />
-                              <span className="text-[9px] font-bold text-slate-500 tracking-tight">{b.hora_inicio} - {b.hora_fin}</span>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="py-6 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1 opacity-40">
-                          <span className="text-[7px] font-black text-slate-300 uppercase">Sin excepciones</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                   {/* Excepciones */}
+                   <div className="space-y-3 pt-2 border-t border-slate-50">
+                     <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-2">
+                         <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Excepciones</span>
+                         <span className="text-[7px] font-black text-primary/30 px-1.5 py-0.5 bg-slate-50 rounded-md">{dayBlocks.length}</span>
+                       </div>
+                       <button 
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           setNewBlock(prev => ({ ...prev, fecha: dateStr, isRecurrente: false }));
+                           setIsExcepcionModalOpen(true);
+                         }}
+                         className="p-1 hover:bg-accent/10 rounded-md text-accent transition-all group/add"
+                       >
+                         <Plus size={10} className="group-hover/add:scale-125 transition-transform" />
+                       </button>
+                     </div>
+
+                     <div className="space-y-2">
+                       {dayBlocks.length > 0 ? (
+                         dayBlocks.map(b => (
+                           <div key={b.id} className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-1.5 group/item relative hover:border-accent/30 transition-all">
+                             <div className="flex items-center justify-between">
+                               <div className="flex items-center gap-1.5">
+                                 <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+                                 <span className="text-[8px] font-black text-slate-700 uppercase">{b.tipo}</span>
+                               </div>
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); deleteBloque(b.id); }} 
+                                 className="opacity-0 group-hover/item:opacity-100 text-slate-300 hover:text-red-500 transition-all p-1"
+                               >
+                                 <Trash2 size={10} />
+                               </button>
+                             </div>
+                             <div className="flex items-center gap-1.5">
+                               <Clock size={9} className="text-slate-400" />
+                               <span className="text-[9px] font-bold text-slate-500 tracking-tight">{b.hora_inicio} - {b.hora_fin}</span>
+                             </div>
+                           </div>
+                         ))
+                       ) : (
+                         <div className="py-6 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1 opacity-40">
+                           <span className="text-[7px] font-black text-slate-300 uppercase">Sin excepciones</span>
+                         </div>
+                       )}
+                     </div>
+                   </div>
                 </div>
               </div>
             );
@@ -1172,34 +1230,38 @@ export default function ConfigView2() {
                         onClick={() => { setEditingTask(task); setIsModalOpen(true); }}
                         className={`w-[240px] p-4 rounded-2xl border shadow-sm transition-all group/card relative cursor-pointer active:scale-95 flex flex-col gap-2 ${
                           task.status === 'nuevo'
-                            ? 'bg-cyan-50 border-cyan-200 shadow-md ring-2 ring-cyan-500/20'
+                            ? 'bg-amber-50 border-amber-200 shadow-md ring-2 ring-amber-500/20'
                           : task.status === 'abierto' 
-                            ? 'bg-purple-50 border-purple-200 shadow-md ring-2 ring-purple-500/20' 
+                            ? 'bg-red-50 border-red-200 shadow-md ring-2 ring-red-500/20' 
                           : task.status === 'pendiente' 
-                            ? 'bg-white border-slate-200 hover:shadow-md hover:border-blue-500/30' 
+                            ? 'bg-sky-50 border-sky-200 hover:shadow-md hover:border-sky-500/30' 
+                          : task.status === 'en espera'
+                            ? 'bg-slate-50 border-slate-200 text-slate-700 shadow-sm'
                           : task.status === 'resuelto'
-                            ? 'bg-emerald-50 border-emerald-200 opacity-60'
+                            ? 'bg-slate-100 border-slate-200 opacity-80'
+                          : task.status === 'fallo' || task.status === 'fallido'
+                            ? 'bg-rose-50 border-rose-200 shadow-md ring-2 ring-rose-500/20'
                           : 'bg-white border-slate-200 hover:shadow-md hover:border-primary/30'
                         }`}
                       >
                          <div className="flex items-center justify-between">
                             <span className="text-[7px] font-black text-slate-300 uppercase tracking-widest">#{task.id}</span>
                             <div className="flex gap-1.5">
-                              <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase ${
-                                task.status === 'nuevo' ? 'bg-cyan-500 text-white' :
-                                task.status === 'abierto' ? 'bg-purple-500 text-white' :
-                                task.status === 'pendiente' ? 'bg-blue-500 text-white' :
-                                task.status === 'en espera' ? 'bg-amber-500 text-white' :
-                                task.status === 'resuelto' ? 'bg-emerald-500 text-white' :
-                                task.status === 'despriorizado' ? 'bg-slate-500 text-white' :
-                                'bg-red-500 text-white'
+                              <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase border ${
+                                task.status === 'nuevo' ? 'bg-amber-500 text-white border-amber-600' :
+                                task.status === 'abierto' ? 'bg-red-600 text-white border-red-700' :
+                                task.status === 'pendiente' ? 'bg-sky-500 text-white border-sky-600' :
+                                task.status === 'en espera' ? 'bg-slate-900 text-white border-slate-900' :
+                                task.status === 'resuelto' ? 'bg-slate-500 text-white border-slate-600' :
+                                task.status === 'despriorizado' ? 'bg-slate-400 text-white border-slate-500' :
+                                'bg-rose-700 text-white border-rose-800'
                               }`}>
                                 {task.status === 'nuevo' ? 'NUEVO' :
                                  task.status === 'abierto' ? 'ABIERTO' :
                                  task.status === 'pendiente' ? 'PENDIENTE' :
                                  task.status === 'en espera' ? 'EN ESPERA' :
                                  task.status === 'resuelto' ? 'RESUELTO' :
-                                 task.status === 'despriorizado' ? 'DESPRIORIZADO' : 'FALLIDO'}
+                                 task.status === 'despriorizado' ? 'DESPRIORIZADO' : 'FALLO'}
                               </span>
                               <span className="text-[7px] font-black bg-slate-50 text-slate-400 px-2 py-0.5 rounded-md uppercase">{task.area || 'Gral'}</span>
                             </div>
@@ -1233,6 +1295,7 @@ export default function ConfigView2() {
           })}
         </div>
       </div>
+      </>
     </div>
   );
 }
