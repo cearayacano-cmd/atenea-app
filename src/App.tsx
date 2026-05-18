@@ -33,9 +33,9 @@ export default function App() {
     { id: 'home', label: 'Inicio', icon: LayoutDashboard },
     { id: 'config2', label: 'Centro de Módulo', icon: Settings },
     { id: 'agenda_pro', label: 'Agenda Pro', icon: ListTodo },
-    { id: 'agenda2', label: 'Consola Focus', icon: BrainCircuit },
     { id: 'dashboard2', label: 'Dashboard Pro', icon: BarChart3 },
     { id: 'history2', label: 'Historial Pro', icon: History },
+    { id: 'agenda2', label: 'Consola Focus', icon: BrainCircuit },
   ];
 
   return (
