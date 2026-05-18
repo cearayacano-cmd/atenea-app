@@ -454,6 +454,56 @@ async function startServer() {
     res.json(backlog);
   });
 
+  app.get("/api/backlog/recommend", (req, res) => {
+    const { lastArea } = req.query;
+    
+    // Fetch all pending backlog items
+    const items = db.prepare("SELECT * FROM Backlog WHERE status = 'pendiente'").all();
+    
+    const now = new Date();
+    
+    const recommended = items.map((item: any) => {
+      // 1. Urgencia (U) based on age in backlog (days since created_at)
+      const createdDate = item.created_at ? new Date(item.created_at + ' UTC') : now;
+      const diffTime = Math.abs(now.getTime() - createdDate.getTime());
+      const diffDays = diffTime / (1000 * 60 * 60 * 24);
+      
+      // Urgencia scale: older tasks are more urgent, maxing at 10.0 after 7 days
+      const U = Math.min(10.0, diffDays * 1.5 + 2.0); // starts at 2.0, grows by 1.5 per day
+      
+      // 2. Impacto (I) based on priority
+      const I = item.prioridad; // 10, 7, 4, 2
+      
+      // 3. Dependencia (D): heuristic based on task id for variance
+      const D = (item.id % 3) * 3; // gives 0, 3, or 6
+      
+      // 4. Contexto (C): boost of 10 if same area
+      const C = (lastArea && item.area && lastArea.toString().toLowerCase() === item.area.toLowerCase()) ? 10.0 : 0.0;
+      
+      // Weights
+      const Wu = 0.35;
+      const Wi = 0.30;
+      const Wd = 0.20;
+      const Wc = 0.15;
+      
+      const score = (Wu * U) + (Wi * I) + (Wd * D) + (Wc * C);
+      
+      return {
+        ...item,
+        urgencia: parseFloat(U.toFixed(1)),
+        impacto: I,
+        dependencia: D,
+        contexto: C,
+        score: parseFloat(score.toFixed(2))
+      };
+    });
+    
+    // Sort by score descending
+    recommended.sort((a: any, b: any) => b.score - a.score);
+    
+    res.json(recommended);
+  });
+
   app.post("/api/backlog", (req, res) => {
     const { actividad, prioridad, status, area } = req.body;
     const result = db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area) VALUES (?, ?, ?, ?)")

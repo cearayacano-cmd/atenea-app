@@ -4,11 +4,11 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo } from 'lucide-react';
+import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo, BrainCircuit } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import HomeView from './components/HomeView';
 import ConfigView2 from './components/ConfigView2';
-import AgendaView2 from './components/AgendaView2';
+import FocusView from './components/FocusView';
 import DashboardView2 from './components/DashboardView2';
 import HistoryView2 from './components/HistoryView2';
 import logoLatam from './assets/logo_latam.png';
@@ -31,7 +31,7 @@ export default function App() {
   const navItems = [
     { id: 'home', label: 'Inicio', icon: LayoutDashboard },
     { id: 'config2', label: 'Centro de Módulo', icon: Settings },
-    { id: 'agenda2', label: 'Agenda Pro', icon: ListTodo },
+    { id: 'agenda2', label: 'Consola Focus', icon: BrainCircuit },
     { id: 'dashboard2', label: 'Dashboard Pro', icon: BarChart3 },
     { id: 'history2', label: 'Historial Pro', icon: History },
   ];
@@ -136,11 +136,7 @@ export default function App() {
               )}
               {currentView === 'config2' && <ConfigView2 />}
               {currentView === 'agenda2' && (
-                <AgendaView2 
-                  onNavigate={(v) => setCurrentView(v as View)} 
-                  selectedDate={selectedDate} 
-                  setSelectedDate={setSelectedDate} 
-                />
+                <FocusView selectedDate={selectedDate} />
               )}
               {currentView === 'dashboard2' && (
                 <DashboardView2 
