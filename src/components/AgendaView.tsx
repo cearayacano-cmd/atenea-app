@@ -67,7 +67,7 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
   });
   
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
-  const isPast = new Date(selectedDate) < new Date(new Date().toISOString().split('T')[0]);
+  const isPast = selectedDate < new Date().toISOString().split('T')[0];
   const isClosed = plan?.estado_cierre === 1;
   const isExecutionStarted = plan?.ejecucion_iniciada === 1;
 

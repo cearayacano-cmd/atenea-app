@@ -259,7 +259,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
   });
   
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
-  const isPast = new Date(selectedDate) < new Date(new Date().toISOString().split('T')[0]);
+  const isPast = selectedDate < new Date().toISOString().split('T')[0];
   const isClosed = plan?.estado_cierre === 1;
   const isExecutionStarted = plan?.ejecucion_iniciada === 1;
 
@@ -627,7 +627,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
               <div>
                  <h2 className="text-3xl font-black text-slate-900 tracking-tight">Agenda de Operaciones</h2>
                  <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">
-                    {new Date(selectedDate).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    {new Date(selectedDate + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
                  </p>
               </div>
            </div>

@@ -303,7 +303,7 @@ export default function CommandCenterView() {
           <div className="flex items-center gap-3 bg-bg-main p-1.5 rounded-xl border border-border-soft">
             <button className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all"><ChevronLeft size={18} /></button>
             <div className="px-4 py-1 text-sm font-bold text-primary">
-              Semana del {new Date(selectedWeekStart).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+              Semana del {new Date(selectedWeekStart + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
             </div>
             <button className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all"><ChevronRight size={18} /></button>
           </div>

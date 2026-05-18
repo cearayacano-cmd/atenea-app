@@ -1196,8 +1196,8 @@ export default function ConfigView2() {
           </div>
         </div>
 
-        {/* Tablero Kanban en Formato Swimlanes con Cuadrícula Compacta */}
-        <div className="flex flex-col gap-6 flex-1 h-full overflow-y-auto pr-2 custom-scrollbar pb-4">
+        {/* Tablero Kanban en Formato de 4 Columnas Verticales con Scroll Independiente */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1 min-h-[580px] overflow-hidden pb-4">
           {PRIORITIES.map(priority => {
             const tasks = backlog.filter(t => t.prioridad === priority.value);
             return (
@@ -1205,22 +1205,21 @@ export default function ConfigView2() {
                 key={priority.value} 
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => onDrop(e, priority.value)}
-                className="flex gap-4 items-stretch group/lane bg-white/40 p-4 rounded-[24px] border border-slate-100 shadow-sm"
+                className="flex flex-col gap-4 bg-slate-50/40 p-4 rounded-[24px] border border-slate-100 shadow-sm h-[580px] overflow-hidden"
               >
-                {/* Etiqueta Lateral de Prioridad */}
-                <div className={`w-12 rounded-xl flex items-center justify-center transition-all ${priority.color.replace('bg-', 'bg-opacity-20 text-')}`} style={{ backgroundColor: priority.color.includes('bg-') ? undefined : priority.color + '15' }}>
-                  <div className={`flex flex-col items-center gap-2 py-4`}>
-                    <span className="text-[9px] font-black text-slate-400 bg-white/80 px-2 py-0.5 rounded-full mb-2">
-                      {tasks.length}
-                    </span>
-                    <h5 className="text-[10px] font-black uppercase tracking-[0.3em] -rotate-180 [writing-mode:vertical-lr] whitespace-nowrap drop-shadow-sm opacity-80">
-                      {priority.label}
-                    </h5>
+                {/* Cabecera Superior de la Columna */}
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-white shadow-sm border border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full ${priority.color}`} />
+                    <span className="text-[10px] font-black text-slate-800 tracking-wider">{priority.label}</span>
                   </div>
+                  <span className="text-[9px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                    {tasks.length}
+                  </span>
                 </div>
-
-                {/* Contenedor Grid de Tareas */}
-                <div className="flex-1 flex flex-wrap gap-4 content-start">
+ 
+                {/* Contenedor de Tareas Vertical con Scrollbar */}
+                <div className="flex-1 flex flex-col gap-3 overflow-y-auto pr-1 custom-scrollbar pb-4">
                   {tasks.length > 0 ? (
                     tasks.map(task => (
                       <div 
@@ -1228,7 +1227,7 @@ export default function ConfigView2() {
                         draggable
                         onDragStart={e => handleDragStart(e, task.id)}
                         onClick={() => { setEditingTask(task); setIsModalOpen(true); }}
-                        className={`w-[240px] p-4 rounded-2xl border shadow-sm transition-all group/card relative cursor-pointer active:scale-95 flex flex-col gap-2 ${
+                        className={`w-full p-4 rounded-2xl border shadow-sm transition-all group/card relative cursor-pointer active:scale-95 flex flex-col gap-2 ${
                           task.status === 'nuevo'
                             ? 'bg-amber-50 border-amber-200 shadow-md ring-2 ring-amber-500/20'
                           : task.status === 'abierto' 
@@ -1285,8 +1284,8 @@ export default function ConfigView2() {
                       </div>
                     ))
                   ) : (
-                    <div className="w-full flex items-center justify-center opacity-40 py-6 border-2 border-dashed border-slate-200 rounded-2xl">
-                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sin tareas en esta prioridad</span>
+                    <div className="w-full flex flex-col items-center justify-center opacity-40 py-12 border-2 border-dashed border-slate-200 rounded-2xl">
+                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Sin tareas en esta prioridad</span>
                     </div>
                   )}
                 </div>

@@ -626,7 +626,7 @@ async function startServer() {
   app.post("/api/ai/generate-report", async (req, res) => {
     try {
       const { prompt } = req.body;
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
       const response = await model.generateContent(prompt);
       res.json({ text: response.response.text() });
     } catch (error) {
@@ -638,7 +638,7 @@ async function startServer() {
   app.post("/api/ia/procesar-backlog", async (req, res) => {
     const { text } = req.body;
     try {
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
       const result = await model.generateContent(`Eres Atenea, una IA experta en Inteligencia Operativa.
             Analiza el siguiente texto y extrae una lista de tareas para el backlog.
             Categoriza cada tarea por área (Monitoreo, Feedback, Tendencias, Alertas, General) y asigna una prioridad (10: Crítica, 7: Alta, 4: Media, 2: Baja).
@@ -677,7 +677,7 @@ async function startServer() {
   app.post("/api/ai/analyze-backlog", async (req, res) => {
     try {
       const { text } = req.body;
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
       const response = await model.generateContent(`Analiza el siguiente texto libre y extrae una lista de actividades concretas para un backlog. 
         Para cada actividad:
         1. Asigna una prioridad basada en el contexto (10 para crítica, 7 para alta, 4 para media, 2 para baja).
