@@ -358,16 +358,18 @@ export default function FocusView({ selectedDate }: { selectedDate: string }) {
               </h2>
             </div>
 
-            {/* Timer HUD */}
-            <div className="bg-slate-900 text-white rounded-3xl p-8 flex flex-col items-center justify-center gap-3 shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-rose-500" />
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">TIEMPO REAL EN FOCO</span>
-              <span className="text-5xl font-mono font-black tracking-widest text-slate-100 drop-shadow-[0_0_8px_rgba(255,255,255,0.1)]">
-                {formatTime(elapsedSeconds)}
+            {/* Telemetry Status HUD (Non-Anxiety Inducing) */}
+            <div className="bg-[#0f004f] text-white rounded-3xl p-8 flex flex-col items-center justify-center gap-3 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#99CC33] via-emerald-400 to-[#00D6CC]" />
+              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#99CC33] animate-ping" />
+                MODO ENFOQUE OPERATIVO ACTIVO
               </span>
-              <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1 mt-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Telemetría pasiva activa
+              <span className="text-sm font-black text-slate-100 uppercase tracking-wide text-center">
+                Atenea está capturando telemetría de forma silenciosa.
+              </span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mt-1 text-center">
+                Pestaña monitoreada activamente • Concéntrate en resolver la actividad.
               </span>
             </div>
 
@@ -572,8 +574,8 @@ export default function FocusView({ selectedDate }: { selectedDate: string }) {
                       {t.area || 'Gral'}
                     </span>
                   </div>
-                  <span className="text-[9px] font-black bg-white border border-emerald-200 text-emerald-600 px-2 py-0.5 rounded-md flex items-center gap-1 whitespace-nowrap">
-                    <Clock size={10} /> {t.tiempo_invertido_minutos} min
+                  <span className="text-[8px] font-black bg-emerald-500 text-white px-2.5 py-1 rounded-md flex items-center gap-1 whitespace-nowrap shadow-sm uppercase tracking-wider">
+                    RESUELTA
                   </span>
                 </div>
               ))

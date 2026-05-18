@@ -9,11 +9,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import HomeView from './components/HomeView';
 import ConfigView2 from './components/ConfigView2';
 import FocusView from './components/FocusView';
+import AgendaView2 from './components/AgendaView2';
 import DashboardView2 from './components/DashboardView2';
 import HistoryView2 from './components/HistoryView2';
 import logoLatam from './assets/logo_latam.png';
 
-type View = 'home' | 'config2' | 'agenda2' | 'dashboard2' | 'history2';
+type View = 'home' | 'config2' | 'agenda2' | 'agenda_pro' | 'dashboard2' | 'history2';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
@@ -31,6 +32,7 @@ export default function App() {
   const navItems = [
     { id: 'home', label: 'Inicio', icon: LayoutDashboard },
     { id: 'config2', label: 'Centro de Módulo', icon: Settings },
+    { id: 'agenda_pro', label: 'Agenda Pro', icon: ListTodo },
     { id: 'agenda2', label: 'Consola Focus', icon: BrainCircuit },
     { id: 'dashboard2', label: 'Dashboard Pro', icon: BarChart3 },
     { id: 'history2', label: 'Historial Pro', icon: History },
@@ -135,6 +137,13 @@ export default function App() {
                 <HomeView onNavigate={(view) => setCurrentView(view as View)} />
               )}
               {currentView === 'config2' && <ConfigView2 />}
+              {currentView === 'agenda_pro' && (
+                <AgendaView2 
+                  onNavigate={(v) => setCurrentView(v as View)} 
+                  selectedDate={selectedDate} 
+                  setSelectedDate={setSelectedDate} 
+                />
+              )}
               {currentView === 'agenda2' && (
                 <FocusView selectedDate={selectedDate} />
               )}

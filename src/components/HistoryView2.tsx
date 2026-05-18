@@ -13,6 +13,7 @@ interface Task {
   evidencias: { fecha: string; text: string }[];
   fechas: string[];
   completada: boolean;
+  tiempos?: { fecha: string; minutos: number }[];
 }
 
 const getPriorityInfo = (value: number) => {
@@ -430,6 +431,27 @@ export default function HistoryView() {
                           </div>
                         )}
 
+                        {/* Registro de Telemetría de Tiempos (Líder/Supervisor) */}
+                        {task.tiempos && task.tiempos.length > 0 && (
+                          <div className="mb-6">
+                            <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                              <Clock size={12} className="text-[#99CC33]" />
+                              Registro de Enfoque Telemetría (Vista Líder)
+                            </h5>
+                            <div className="space-y-2 bg-slate-900 text-slate-100 rounded-2xl p-4 border border-slate-800 shadow-xl relative overflow-hidden">
+                              <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-emerald-500 to-[#99CC33]" />
+                              {task.tiempos.map((t, idx) => (
+                                <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b border-white/5 last:border-b-0">
+                                  <span className="font-bold text-white/60">{t.fecha}</span>
+                                  <span className="font-mono font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                    {t.minutos} min netos en foco
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Línea de Tiempo Operativa (Logs) */}
                         <div>
                           <h5 className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -438,7 +460,7 @@ export default function HistoryView() {
                           </h5>
                           {task.logs && task.logs.length > 0 ? (
                             <div className="space-y-3 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-slate-100">
-                              {task.logs.sort((a: any, b: any) => new Date(b.hora).getTime() - new Date(a.hora).getTime()).map((log: any, i: number) => (
+                              {[...task.logs].sort((a: any, b: any) => new Date(b.hora).getTime() - new Date(a.hora).getTime()).map((log: any, i: number) => (
                                 <div key={i} className="relative pl-8 group">
                                   <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full border-4 border-white shadow-sm flex items-center justify-center transition-all group-hover:scale-110 ${
                                     log.estado_nuevo === 'resuelto' ? 'bg-emerald-500' : 

@@ -580,7 +580,8 @@ async function startServer() {
           evidencias: [],
           fechas: new Set(),
           completada: task.estado_ejecucion === 'terminada',
-          logs: []
+          logs: [],
+          tiempos: []
         };
       }
 
@@ -614,6 +615,9 @@ async function startServer() {
             grouped[key].evidencias.push({ fecha: task.fecha, text: task.evidencia });
           }
         }
+      }
+      if (task.tiempo_invertido_minutos !== undefined && task.tiempo_invertido_minutos > 0) {
+        grouped[key].tiempos.push({ fecha: task.fecha, minutos: task.tiempo_invertido_minutos });
       }
       grouped[key].fechas.add(task.fecha);
       if (task.estado_ejecucion === 'terminada') grouped[key].completada = true;
