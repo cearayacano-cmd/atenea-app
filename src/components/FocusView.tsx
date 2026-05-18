@@ -398,66 +398,108 @@ export default function FocusView({ selectedDate }: { selectedDate: string }) {
         ) : (
           /* Recommendation Feed Screen */
           <div className="flex flex-col gap-6">
-            {/* Top 1 Hero Recommendation */}
+            {/* Header / Intro Check-In */}
+            <div className="bg-gradient-to-r from-blue-50/50 via-white to-slate-50 p-6 rounded-3xl border border-slate-100/80 flex flex-col gap-2">
+              <div className="flex items-center gap-2.5 text-indigo-900">
+                <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
+                  <BrainCircuit size={20} className="animate-pulse" />
+                </div>
+                <h3 className="text-sm font-black uppercase tracking-wider">🎯 Panel de Preparación y Autonomía (Ready Check)</h3>
+              </div>
+              <p className="text-[11px] font-bold text-slate-500 leading-relaxed max-w-3xl">
+                Atenea ha analizado tu backlog en vivo. Para darte control y autonomía sin perder la alineación operativa, puedes elegir y declarar <strong className="text-indigo-950 font-black">"READY"</strong> en cualquiera de las siguientes 3 mejores opciones recomendadas.
+              </p>
+            </div>
+
             {recommendations.length > 0 ? (
-              <motion.div 
-                layoutId="focusContainer"
-                className="latam-card !p-8 bg-gradient-to-br from-indigo-900 to-[#0A0B2E] text-white border border-[#1b1c4e] shadow-2xl rounded-[32px] flex flex-col gap-6 relative overflow-hidden"
-              >
-                <div className="absolute top-0 right-0 w-80 h-80 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-accent/10 rounded-full blur-2xl pointer-events-none" />
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-[8px] font-black bg-accent text-white px-3 py-1 rounded-full uppercase tracking-widest flex items-center gap-1.5">
-                    <Sparkles size={10} /> RECOMENDACIÓN TOP DE ENFOQUE
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <BrainCircuit size={14} className="text-sky-400" />
-                    <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest">Score: {recommendations[0].score}</span>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {recommendations.slice(0, 3).map((item, idx) => {
+                  const priority = getPriorityConfig(item.prioridad);
+                  const isTopOne = idx === 0;
 
-                <div className="flex flex-col gap-2">
-                  <div className="flex gap-2">
-                    <span className={`text-[8px] font-black px-2.5 py-0.5 rounded-md ${getPriorityConfig(recommendations[0].prioridad).color}`}>
-                      {getPriorityConfig(recommendations[0].prioridad).label}
-                    </span>
-                    <span className="text-[8px] font-black bg-white/10 text-white/70 px-2.5 py-0.5 rounded-md uppercase">
-                      {recommendations[0].area || 'Gral'}
-                    </span>
-                  </div>
-                  <h2 className="text-2xl font-black text-white leading-snug tracking-tight uppercase mt-1">
-                    {recommendations[0].actividad}
-                  </h2>
-                </div>
+                  return (
+                    <motion.div 
+                      key={item.id}
+                      layoutId={`rec-${item.id}`}
+                      className={`latam-card !p-6 rounded-[28px] border flex flex-col justify-between gap-5 relative overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
+                        isTopOne 
+                          ? 'bg-gradient-to-b from-indigo-950 via-[#0a0b2d] to-[#0a0b2d] text-white border-indigo-900 shadow-lg' 
+                          : 'bg-white text-slate-800 border-slate-100 hover:border-blue-200/50'
+                      }`}
+                    >
+                      {/* Top Glowing Blur on Card #1 */}
+                      {isTopOne && (
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none" />
+                      )}
 
-                {/* Score indicators */}
-                <div className="grid grid-cols-4 gap-2 bg-white/5 rounded-2xl p-4 border border-white/5 text-center text-white">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[7px] font-black text-white/50 uppercase">Urgencia</span>
-                    <span className="text-xs font-black text-sky-400">{recommendations[0].urgencia}</span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[7px] font-black text-white/50 uppercase">Impacto</span>
-                    <span className="text-xs font-black text-sky-400">{recommendations[0].impacto}</span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[7px] font-black text-white/50 uppercase">Dependen.</span>
-                    <span className="text-xs font-black text-sky-400">+{recommendations[0].dependencia}</span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[7px] font-black text-white/50 uppercase">Boost Ctx</span>
-                    <span className="text-xs font-black text-sky-400">+{recommendations[0].contexto}</span>
-                  </div>
-                </div>
+                      <div className="flex flex-col gap-4">
+                        {/* Header: Badge & Score */}
+                        <div className="flex items-center justify-between">
+                          <span className={`text-[7px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${
+                            isTopOne ? 'bg-[#99CC33] text-indigo-950' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {isTopOne ? '⚡ RECOMENDADO TOP' : `OPCIÓN #${idx + 1}`}
+                          </span>
+                          <span className={`text-[8px] font-black uppercase tracking-widest ${
+                            isTopOne ? 'text-sky-400' : 'text-slate-400'
+                          }`}>
+                            Score: {item.score}
+                          </span>
+                        </div>
 
-                <button 
-                  onClick={() => startFocus(recommendations[0])}
-                  className="w-full py-4.5 bg-accent hover:bg-accent/90 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-accent/30"
-                >
-                  <Play size={14} fill="white" /> INICIAR ENFOQUE ACTIVO
-                </button>
-              </motion.div>
+                        {/* Title & Area */}
+                        <div className="flex flex-col gap-2">
+                          <div className="flex gap-1.5">
+                            <span className={`text-[7px] font-black px-2 py-0.5 rounded ${priority.color}`}>
+                              {priority.label}
+                            </span>
+                            <span className={`text-[7px] font-black px-2 py-0.5 rounded uppercase ${
+                              isTopOne ? 'bg-white/10 text-white/70' : 'bg-slate-50 text-slate-400'
+                            }`}>
+                              {item.area || 'Gral'}
+                            </span>
+                          </div>
+                          <h4 className={`text-xs font-black uppercase tracking-tight leading-snug line-clamp-3 ${
+                            isTopOne ? 'text-white' : 'text-slate-800'
+                          }`}>
+                            {item.actividad}
+                          </h4>
+                        </div>
+                      </div>
+
+                      {/* Detailed Score Breakdown */}
+                      <div className="flex flex-col gap-3">
+                        <div className={`grid grid-cols-2 gap-2 text-center text-[8px] p-3 rounded-xl border ${
+                          isTopOne 
+                            ? 'bg-white/5 border-white/5 text-white/80' 
+                            : 'bg-slate-50 border-slate-100 text-slate-500'
+                        }`}>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="opacity-60 uppercase font-bold text-[6px]">Urgencia</span>
+                            <span className="font-extrabold">{item.urgencia}</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="opacity-60 uppercase font-bold text-[6px]">Impacto</span>
+                            <span className="font-extrabold">{item.impacto}</span>
+                          </div>
+                        </div>
+
+                        {/* Declarar Ready Button */}
+                        <button 
+                          onClick={() => startFocus(item)}
+                          className={`w-full py-3.5 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm ${
+                            isTopOne 
+                              ? 'bg-[#99CC33] hover:bg-[#a6db3a] text-indigo-950 shadow-[#99CC33]/10' 
+                              : 'bg-indigo-50 hover:bg-primary hover:text-white text-primary border border-indigo-100/50'
+                          }`}
+                        >
+                          <Play size={10} fill="currentColor" /> DECLARAR READY
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
             ) : (
               <div className="latam-card py-16 text-center bg-white border border-slate-200 flex flex-col items-center gap-4">
                 <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-slate-300">
@@ -465,44 +507,6 @@ export default function FocusView({ selectedDate }: { selectedDate: string }) {
                 </div>
                 <h3 className="text-base font-black text-slate-800 uppercase tracking-wider">¡Sin pendientes en el Backlog!</h3>
                 <p className="text-xs text-slate-400 max-w-sm">Has resuelto todo lo programado en tu flujo. Disfruta tu victoria o crea una nueva tarea.</p>
-              </div>
-            )}
-
-            {/* Recommendations Alternatives (Deck) */}
-            {recommendations.length > 1 && (
-              <div className="flex flex-col gap-4">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Layers size={14} /> Recomendaciones Alternativas
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {recommendations.slice(1, 3).map((item) => (
-                    <div 
-                      key={item.id}
-                      className="latam-card !p-5 bg-white border border-slate-100 hover:border-blue-200/50 hover:shadow-md transition-all rounded-2xl flex flex-col gap-4 justify-between"
-                    >
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <span className={`text-[7px] font-black px-2 py-0.5 rounded ${getPriorityConfig(item.prioridad).color}`}>
-                            {getPriorityConfig(item.prioridad).label}
-                          </span>
-                          <span className="text-[8px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded">
-                            Score: {item.score}
-                          </span>
-                        </div>
-                        <h5 className="text-[10px] font-black text-slate-700 uppercase tracking-tight leading-snug">
-                          {item.actividad}
-                        </h5>
-                      </div>
-                      
-                      <button 
-                        onClick={() => startFocus(item)}
-                        className="w-full py-3 bg-slate-50 hover:bg-primary hover:text-white border border-slate-200/50 rounded-xl text-[8px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5"
-                      >
-                        <Play size={10} /> Tomar como Desvío
-                      </button>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
           </div>
