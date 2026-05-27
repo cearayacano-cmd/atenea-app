@@ -84,12 +84,13 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
               }
             });
 
+            const hasTasks = dayTasks.length > 0;
             return {
               day: new Date(dateStr + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase(),
-              percentage: pTotal > 0 ? Math.round(((pCritico + pAlto + pMedio) / pTotal) * 100) : 0,
-              critico: pTotal > 0 ? Math.round((pCritico / pTotal) * 100) : 0,
-              alto: pTotal > 0 ? Math.round((pAlto / pTotal) * 100) : 0,
-              medio: pTotal > 0 ? Math.round((pMedio / pTotal) * 100) : 0,
+              percentage: hasTasks ? (pTotal > 0 ? Math.round(((pCritico + pAlto + pMedio) / pTotal) * 100) : 0) : null,
+              critico: hasTasks ? (pTotal > 0 ? Math.round((pCritico / pTotal) * 100) : 0) : null,
+              alto: hasTasks ? (pTotal > 0 ? Math.round((pAlto / pTotal) * 100) : 0) : null,
+              medio: hasTasks ? (pTotal > 0 ? Math.round((pMedio / pTotal) * 100) : 0) : null,
               date: dateStr
             };
           })
@@ -188,6 +189,11 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
     return acc + (isExecuted ? (Number(t.prioridad) || 0) : 0);
   }, 0);
   const porcentajeEstrategico = pesoTotal > 0 ? Math.round((pesoCompletado / pesoTotal) * 100) : 0;
+  
+  const workedDays = trend.filter(t => t.percentage !== null);
+  const promedioEstrategicoSemanal = workedDays.length > 0
+    ? Math.round(workedDays.reduce((acc, d) => acc + (d.percentage || 0), 0) / workedDays.length)
+    : 0;
 
   const totalMinsOp = incidencias.reduce((acc, inc) => {
     const [h1, m1] = inc.hora_inicio.split(':').map(Number);
@@ -240,14 +246,14 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
 
          <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/30 group hover:scale-[1.02] transition-all relative overflow-hidden">
             {/* Lógica de semáforo semanal */}
-            <div className={`absolute top-4 right-6 w-3 h-3 rounded-full blur-[2px] animate-pulse ${trend.reduce((acc, d) => acc + d.percentage, 0) / 5 >= 70 ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]'}`} />
+            <div className={`absolute top-4 right-6 w-3 h-3 rounded-full blur-[2px] animate-pulse ${promedioEstrategicoSemanal >= 70 ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]'}`} />
             <div className="flex items-center gap-3 mb-4">
                <div className="p-2 bg-slate-50 rounded-xl text-slate-400"><TrendingUp size={18} /></div>
                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lectura de la Semana</span>
             </div>
             <p className="text-sm font-black text-slate-800 leading-tight">
-               Semana con {trend.reduce((acc, d) => acc + d.percentage, 0) / 5 < 50 ? 'riesgo' : 'estabilidad'} estratégica.
-               <span className="block text-[10px] text-slate-400 mt-1">Promedio: {Math.round(trend.reduce((acc, d) => acc + d.percentage, 0) / 5)}%</span>
+               Semana con {promedioEstrategicoSemanal < 50 ? 'riesgo' : 'estabilidad'} estratégica.
+               <span className="block text-[10px] text-slate-400 mt-1">Promedio: {promedioEstrategicoSemanal}%</span>
             </p>
          </div>
 
@@ -319,7 +325,7 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
                       <div className="flex gap-8">
                          <div className="flex flex-col items-end">
                             <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Impacto Promedio</span>
-                            <span className="text-lg font-black text-slate-900">{Math.round(trend.reduce((acc, d) => acc + d.percentage, 0) / 5)}%</span>
+                            <span className="text-lg font-black text-slate-900">{promedioEstrategicoSemanal}%</span>
                          </div>
                          <div className="flex flex-col items-end">
                             <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Pérdida Acumulada</span>
@@ -335,38 +341,47 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
                                {/* Fondo de capacidad */}
                                <div className="absolute inset-0 bg-slate-200/10 z-0" />
                                
-                               {/* Barra Stacked por Prioridad */}
-                               <div 
-                                 style={{ height: `${Math.max(2, t.percentage)}%` }} 
-                                 className="w-full max-w-[54px] transition-all duration-1000 ease-out z-10 relative flex flex-col-reverse rounded-t-xl overflow-hidden shadow-2xl"
-                               >
-                                  {/* Segmento Medio/Bajo */}
-                                  <div 
-                                    style={{ height: `${(t.medio / t.percentage) * 100}%` }}
-                                    className="w-full bg-gradient-to-t from-slate-400 to-slate-300 flex items-center justify-center text-[8px] font-black text-white"
-                                  >
-                                    {t.medio > 10 && `${t.medio}%`}
-                                  </div>
-                                  {/* Segmento Alto */}
-                                  <div 
-                                    style={{ height: `${(t.alto / t.percentage) * 100}%` }}
-                                    className="w-full bg-gradient-to-t from-amber-500 to-amber-400 border-t border-white/20 flex items-center justify-center text-[8px] font-black text-white"
-                                  >
-                                    {t.alto > 10 && `${t.alto}%`}
-                                  </div>
-                                  {/* Segmento Crítico */}
-                                  <div 
-                                    style={{ height: `${(t.critico / t.percentage) * 100}%` }}
-                                    className="w-full bg-gradient-to-t from-red-600 to-red-500 border-t border-white/20 flex items-center justify-center text-[8px] font-black text-white"
-                                  >
-                                    {t.critico > 10 && `${t.critico}%`}
-                                  </div>
-                               </div>
+                               {t.percentage === null ? (
+                                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 bg-slate-100/30">
+                                   <span className="text-lg font-black text-slate-300">N/L</span>
+                                   <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">No Trabajado</span>
+                                 </div>
+                               ) : (
+                                 <>
+                                   {/* Barra Stacked por Prioridad */}
+                                   <div 
+                                     style={{ height: `${Math.max(2, t.percentage)}%` }} 
+                                     className="w-full max-w-[54px] transition-all duration-1000 ease-out z-10 relative flex flex-col-reverse rounded-t-xl overflow-hidden shadow-2xl"
+                                   >
+                                      {/* Segmento Medio/Bajo */}
+                                      <div 
+                                        style={{ height: `${(t.medio / t.percentage) * 100}%` }}
+                                        className="w-full bg-gradient-to-t from-slate-400 to-slate-300 flex items-center justify-center text-[8px] font-black text-white"
+                                      >
+                                        {t.medio > 10 && `${t.medio}%`}
+                                      </div>
+                                      {/* Segmento Alto */}
+                                      <div 
+                                        style={{ height: `${(t.alto / t.percentage) * 100}%` }}
+                                        className="w-full bg-gradient-to-t from-amber-500 to-amber-400 border-t border-white/20 flex items-center justify-center text-[8px] font-black text-white"
+                                      >
+                                        {t.alto > 10 && `${t.alto}%`}
+                                      </div>
+                                      {/* Segmento Crítico */}
+                                      <div 
+                                        style={{ height: `${(t.critico / t.percentage) * 100}%` }}
+                                        className="w-full bg-gradient-to-t from-red-600 to-red-500 border-t border-white/20 flex items-center justify-center text-[8px] font-black text-white"
+                                      >
+                                        {t.critico > 10 && `${t.critico}%`}
+                                      </div>
+                                   </div>
 
-                               {/* Indicador de porcentaje total flotante */}
-                               <div className="absolute top-4 text-[10px] font-black text-slate-400 opacity-40">
-                                  {t.percentage}%
-                               </div>
+                                   {/* Indicador de porcentaje total flotante */}
+                                   <div className="absolute top-4 text-[10px] font-black text-slate-400 opacity-40">
+                                      {t.percentage}%
+                                   </div>
+                                 </>
+                               )}
                             </div>
                             <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">{t.day}</span>
                          </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, AlertCircle, Rocket, Check, X, Calendar as CalendarIcon, Clock, Zap, ListChecks, Play, Search } from 'lucide-react';
+import { getStatusColor, getPriorityColor } from '../utils/colors';
 
 interface Task {
   id?: number;
@@ -17,10 +18,10 @@ interface Task {
 }
 
 const PRIORITIES = [
-  { label: 'CRÍTICA', value: 10, color: 'bg-accent' },
-  { label: 'ALTA', value: 7, color: 'bg-primary' },
-  { label: 'MEDIA', value: 4, color: 'bg-[#00A6D4]' },
-  { label: 'BAJA', value: 2, color: 'bg-[#B8B8B8]' },
+  { label: 'CRÍTICA', value: 10, color: 'bg-red-600' },
+  { label: 'ALTA', value: 7, color: 'bg-orange-500' },
+  { label: 'MEDIA', value: 4, color: 'bg-amber-500' },
+  { label: 'BAJA', value: 2, color: 'bg-emerald-500' },
 ];
 
 const getDurationByPriority = (p: number) => {
@@ -851,31 +852,16 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
                 <div key={item.id} className="p-4 bg-white rounded-xl border border-purple-100 shadow-sm flex gap-4">
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${
-                        PRIORITIES.find(p => p.value === item.prioridad)?.color || 'bg-gray-400'
-                      }`}>
-                        {PRIORITIES.find(p => p.value === item.prioridad)?.label}
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${getPriorityColor(item.prioridad).badge}`}>
+                        {getPriorityColor(item.prioridad).label}
                       </span>
                       {item.area && (
                         <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-primary/10 text-primary border border-primary/20">
                           {item.area}
                         </span>
                       )}
-                      <span className={`text-[10px] font-black px-2 py-1 rounded-md border ${
-                        item.status === 'nuevo' ? 'bg-amber-50 border-amber-100 text-amber-600' :
-                        item.status === 'abierto' ? 'bg-red-50 border-red-100 text-red-600' :
-                        item.status === 'pendiente' ? 'bg-sky-50 border-sky-100 text-sky-500' :
-                        item.status === 'en espera' ? 'bg-slate-900 border-slate-900 text-white' :
-                        item.status === 'resuelto' || item.status === 'terminada' ? 'bg-slate-100 border-slate-200 text-slate-500' :
-                        item.status === 'despriorizado' ? 'bg-slate-50 border-slate-100 text-slate-400' :
-                        'bg-rose-50 border-rose-100 text-rose-700'
-                      }`}>
-                        {item.status === 'nuevo' ? 'NUEVO' :
-                         item.status === 'abierto' ? 'ABIERTO' :
-                         item.status === 'pendiente' ? 'PENDIENTE' : 
-                         item.status === 'en espera' ? 'ESPERA' :
-                         item.status === 'resuelto' || item.status === 'terminada' ? 'RESUELTO' :
-                         item.status === 'despriorizado' ? 'DESPRIORIZADO' : 'FALLO'}
+                      <span className={`text-[10px] font-black px-2 py-1 rounded-md border ${getStatusColor(item.status).badge} ${getStatusColor(item.status).badgeBorder}`}>
+                        {getStatusColor(item.status).label}
                       </span>
                     </div>
                     <p className="text-sm font-medium text-text-main leading-snug">
@@ -888,7 +874,8 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
                         actividad: item.actividad, 
                         prioridad: item.prioridad, 
                         backlog_id: item.id,
-                        area: item.area
+                        area: item.area,
+                        newStatus: 'progreso'
                       })}
                       className="px-3 py-2 bg-[#1A1A40] text-white text-[10px] font-bold rounded-xl hover:bg-[#1A1A40]/90 transition-all flex items-center gap-1 shadow-sm"
                       title="Agregar a la Agenda"
@@ -913,10 +900,8 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
             {pendingSuggestions.map((t) => (
               <div key={t.id} className="flex items-center justify-between p-4 bg-white rounded-xl border border-primary/10 shadow-sm">
                 <div className="flex items-center gap-4">
-                  <span className={`px-2 py-1 rounded-md text-[10px] font-bold text-white ${
-                    PRIORITIES.find(p => p.value === t.prioridad)?.color || 'bg-gray-400'
-                  }`}>
-                    {PRIORITIES.find(p => p.value === t.prioridad)?.label}
+                  <span className={`px-2 py-1 rounded-md text-[10px] font-bold text-white ${getPriorityColor(t.prioridad).badge}`}>
+                    {getPriorityColor(t.prioridad).label}
                   </span>
                   {t.area && (
                     <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
@@ -1070,8 +1055,8 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
                     ) : (
                       <>
                         <td className="p-4">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold text-white ${PRIORITIES.find(p => p.value === task.prioridad)?.color}`}>
-                            {PRIORITIES.find(p => p.value === task.prioridad)?.label}
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold text-white ${getPriorityColor(task.prioridad).badge}`}>
+                            {getPriorityColor(task.prioridad).label}
                           </span>
                           {inlineEditingAreaId === task.id || !task.area ? (
                             <div className="inline-flex items-center gap-1 ml-2">
@@ -1108,16 +1093,8 @@ export default function PlanningView({ onNavigate }: PlanningViewProps) {
                               {task.area}
                             </span>
                           )}
-                          <span className={`ml-2 px-2 py-1 rounded-md text-[9px] font-black border uppercase ${
-                            task.estado_ejecucion === 'nuevo' ? 'bg-amber-50 border-amber-100 text-amber-600' :
-                            task.estado_ejecucion === 'abierto' ? 'bg-red-50 border-red-100 text-red-600' :
-                            task.estado_ejecucion === 'pendiente' ? 'bg-sky-50 border-sky-100 text-sky-500' :
-                            task.estado_ejecucion === 'en espera' ? 'bg-slate-900 border-slate-900 text-white' :
-                            task.estado_ejecucion === 'resuelto' || task.estado_ejecucion === 'terminada' ? 'bg-slate-100 border-slate-200 text-slate-500' :
-                            task.estado_ejecucion === 'despriorizado' ? 'bg-slate-50 border-slate-100 text-slate-400' :
-                            'bg-rose-50 border-rose-100 text-rose-700'
-                          }`}>
-                            {task.estado_ejecucion || 'PENDIENTE'}
+                          <span className={`ml-2 px-2 py-1 rounded-md text-[9px] font-black border uppercase ${getStatusColor(task.estado_ejecucion || 'pendiente').badge} ${getStatusColor(task.estado_ejecucion || 'pendiente').badgeBorder}`}>
+                            {getStatusColor(task.estado_ejecucion || 'pendiente').label}
                           </span>
                         </td>
                         <td className="p-4 font-medium text-text-strong">

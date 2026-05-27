@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Database from "better-sqlite3";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -74,7 +75,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     actividad TEXT,
     prioridad INTEGER DEFAULT 4,
-    status TEXT DEFAULT 'pendiente',
+    status TEXT DEFAULT 'nuevo',
     area TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -87,6 +88,36 @@ db.exec(`
     fecha_hora DATETIME DEFAULT CURRENT_TIMESTAMP,
     comentario TEXT,
     FOREIGN KEY(tarea_id) REFERENCES Tareas(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS Usuarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT,
+    email TEXT UNIQUE,
+    initials TEXT,
+    role TEXT DEFAULT 'operador',
+    rol_ejecutante TEXT DEFAULT 'Calidad Fabrica'
+  );
+
+  CREATE TABLE IF NOT EXISTS Equipos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS UsuariosEquipos (
+    usuario_id INTEGER,
+    equipo_id INTEGER,
+    FOREIGN KEY(usuario_id) REFERENCES Usuarios(id),
+    FOREIGN KEY(equipo_id) REFERENCES Equipos(id),
+    PRIMARY KEY (usuario_id, equipo_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS BacklogAsignaciones (
+    backlog_id INTEGER,
+    user_id INTEGER,
+    FOREIGN KEY(backlog_id) REFERENCES Backlog(id),
+    FOREIGN KEY(user_id) REFERENCES Usuarios(id),
+    PRIMARY KEY (backlog_id, user_id)
   );
 
   INSERT OR IGNORE INTO Configuracion (id, hora_inicio, hora_fin, horas_efectivas) VALUES (1, '08:00', '17:00', 6.0);
@@ -119,6 +150,19 @@ if (!columns.includes("backlog_id")) {
 if (!columns.includes("area")) {
   db.exec("ALTER TABLE Tareas ADD COLUMN area TEXT");
 }
+if (!columns.includes("user_id")) {
+  db.exec("ALTER TABLE Tareas ADD COLUMN user_id INTEGER DEFAULT 1");
+}
+if (!columns.includes("created_at")) {
+  db.exec("ALTER TABLE Tareas ADD COLUMN created_at TEXT");
+}
+if (!columns.includes("assigned_at")) {
+  db.exec("ALTER TABLE Tareas ADD COLUMN assigned_at TEXT");
+}
+if (!columns.includes("closed_at")) {
+  db.exec("ALTER TABLE Tareas ADD COLUMN closed_at TEXT");
+}
+
 
 const backlogInfo = db.prepare("PRAGMA table_info(Backlog)").all();
 const backlogColumns = backlogInfo.map((c: any) => c.name);
@@ -128,6 +172,47 @@ if (!backlogColumns.includes("area")) {
 if (!backlogColumns.includes("created_at")) {
   db.exec("ALTER TABLE Backlog ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
 }
+if (!backlogColumns.includes("is_collaborative")) {
+  db.exec("ALTER TABLE Backlog ADD COLUMN is_collaborative INTEGER DEFAULT 0");
+}
+if (!backlogColumns.includes("owner_id")) {
+  db.exec("ALTER TABLE Backlog ADD COLUMN owner_id INTEGER DEFAULT 1");
+}
+if (!backlogColumns.includes("complejidad")) {
+  db.exec("ALTER TABLE Backlog ADD COLUMN complejidad INTEGER DEFAULT 2");
+}
+if (!backlogColumns.includes("tiempo_estimado")) {
+  db.exec("ALTER TABLE Backlog ADD COLUMN tiempo_estimado INTEGER DEFAULT 60");
+}
+if (!backlogColumns.includes("rol_ejecutante")) {
+  db.exec("ALTER TABLE Backlog ADD COLUMN rol_ejecutante TEXT DEFAULT 'Calidad Fabrica'");
+}
+if (!backlogColumns.includes("justificacion")) {
+  db.exec("ALTER TABLE Backlog ADD COLUMN justificacion TEXT");
+}
+
+const userTableInfo = db.prepare("PRAGMA table_info(Usuarios)").all();
+const userColumns = userTableInfo.map((c: any) => c.name);
+if (!userColumns.includes("role")) {
+  db.exec("ALTER TABLE Usuarios ADD COLUMN role TEXT DEFAULT 'operador'");
+}
+if (!userColumns.includes("rol_ejecutante")) {
+  db.exec("ALTER TABLE Usuarios ADD COLUMN rol_ejecutante TEXT DEFAULT 'Calidad Fabrica'");
+}
+
+if (!columns.includes("complejidad")) {
+  db.exec("ALTER TABLE Tareas ADD COLUMN complejidad INTEGER DEFAULT 2");
+}
+
+// Asegurar que exista el supervisor
+db.prepare("INSERT OR IGNORE INTO Usuarios (email, nombre, initials, role) VALUES (?, ?, ?, ?)").run('carlose.araya@latam.com', 'Carlos E. Araya', 'CA', 'supervisor');
+db.prepare("UPDATE Usuarios SET role = 'supervisor' WHERE email = 'carlose.araya@latam.com'").run();
+
+// Asegurar que existan los operadores por defecto para las pruebas de roles
+db.prepare("INSERT OR IGNORE INTO Usuarios (email, nombre, initials, role, rol_ejecutante) VALUES (?, ?, ?, ?, ?)").run('calidadlatam01@latam.com', 'Calidad LATAM 01', 'LA', 'operador', 'Calidad LATAM');
+db.prepare("INSERT OR IGNORE INTO Usuarios (email, nombre, initials, role, rol_ejecutante) VALUES (?, ?, ?, ?, ?)").run('calidadlatam02@latam.com', 'Calidad LATAM 02', 'LA', 'operador', 'Calidad LATAM');
+db.prepare("INSERT OR IGNORE INTO Usuarios (email, nombre, initials, role, rol_ejecutante) VALUES (?, ?, ?, ?, ?)").run('calidadpe01@latam.com', 'Calidad PE 01', 'PE', 'operador', 'Calidad Fabrica');
+
 if (!columns.includes("estado_ejecucion")) {
   db.exec("ALTER TABLE Tareas ADD COLUMN estado_ejecucion TEXT DEFAULT NULL");
 }
@@ -149,6 +234,9 @@ if (!planColumns.includes("ejecucion_iniciada")) {
 if (!planColumns.includes("hora_inicio_ejecucion")) {
   db.exec("ALTER TABLE PlanesDiarios ADD COLUMN hora_inicio_ejecucion TEXT");
 }
+if (!planColumns.includes("user_id")) {
+  db.exec("ALTER TABLE PlanesDiarios ADD COLUMN user_id INTEGER DEFAULT 1");
+}
 
 const bloquesInfo = db.prepare("PRAGMA table_info(BloquesNoDisponibles)").all();
 const bloquesColumns = bloquesInfo.map((c: any) => c.name);
@@ -157,6 +245,15 @@ if (!bloquesColumns.includes("descripcion")) {
 }
 if (!bloquesColumns.includes("dia_semana")) {
   db.exec("ALTER TABLE BloquesNoDisponibles ADD COLUMN dia_semana TEXT");
+}
+if (!bloquesColumns.includes("user_id")) {
+  db.exec("ALTER TABLE BloquesNoDisponibles ADD COLUMN user_id INTEGER DEFAULT 1");
+}
+
+const incidenciasInfo = db.prepare("PRAGMA table_info(Incidencias)").all();
+const incidenciasColumns = incidenciasInfo.map((c: any) => c.name);
+if (!incidenciasColumns.includes("user_id")) {
+  db.exec("ALTER TABLE Incidencias ADD COLUMN user_id INTEGER DEFAULT 1");
 }
 
 const blockInfo = db.prepare("PRAGMA table_info(BloquesNoDisponibles)").all();
@@ -172,35 +269,114 @@ async function startServer() {
   app.set("trust proxy", true);
   app.use(express.json());
 
-  // User Identity from IAP
+  // Interceptor para inyectar userId desde el header a query/body
+  app.use((req, res, next) => {
+    const headerUserId = req.headers['x-user-id'];
+    if (headerUserId) {
+      // Validate user exists in DB, fallback to user 1 if not
+      const parsedId = parseInt(headerUserId as string);
+      const validUser = parsedId ? db.prepare("SELECT id FROM Usuarios WHERE id = ?").get(parsedId) : null;
+      const resolvedId = (validUser ? parsedId : 1).toString();
+      if (req.method === 'GET' || req.method === 'DELETE') {
+        req.query.userId = resolvedId;
+      } else {
+        req.body.userId = resolvedId;
+      }
+    }
+    next();
+  });
+
   app.get("/api/me", (req, res) => {
-    const rawEmail = req.header('x-goog-authenticated-user-email');
-    const rawId = req.header('x-goog-authenticated-user-id');
-    
-    if (rawEmail) {
-      const email = rawEmail.split(':').pop() || '';
-      const namePart = email.split('@')[0];
-      const name = namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/[._]/g, ' ');
-      
+    const uid = parseInt(req.query.userId as string) || 1;
+    const user = db.prepare("SELECT * FROM Usuarios WHERE id = ?").get(uid);
+    if (user) {
       return res.json({
-        email,
-        name,
-        initials: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-        id: rawId
+        email: user.email,
+        name: user.nombre,
+        initials: user.initials,
+        id: user.id,
+        role: user.role,
+        rol_ejecutante: user.rol_ejecutante || 'Calidad Fabrica'
       });
     }
-
     res.json({
       email: 'carlos@latam.com',
       name: 'Carlos',
       initials: 'C',
-      id: 'dev-user'
+      id: 1,
+      role: 'operador',
+      rol_ejecutante: 'Calidad Fabrica'
     });
+  });
+
+  app.get("/api/usuarios", (req, res) => {
+    const usuarios = db.prepare("SELECT * FROM Usuarios").all();
+    
+    // Buscar tareas críticas activas en Backlog
+    const criticalTasks = db.prepare(`
+      SELECT b.id, b.actividad, ba.user_id 
+      FROM Backlog b
+      JOIN BacklogAsignaciones ba ON b.id = ba.backlog_id
+      WHERE b.prioridad = 10 AND b.status IN ('nuevo', 'abierto', 'progreso', 'en progreso')
+    `).all() as any[];
+
+    // Buscar tareas críticas activas individuales
+    const activeCriticalTasks = db.prepare(`
+      SELECT id, actividad, user_id
+      FROM Tareas
+      WHERE prioridad = 10 AND completada = 0 AND estado_ejecucion IN ('nuevo', 'abierto', 'progreso', 'en progreso')
+    `).all() as any[];
+
+    const usuariosEnriquecidos = usuarios.map((u: any) => {
+      const lockedByBacklog = criticalTasks.find(t => t.user_id === u.id);
+      const lockedByDaily = activeCriticalTasks.find(t => t.user_id === u.id);
+      const lockedTaskName = lockedByBacklog ? lockedByBacklog.actividad : (lockedByDaily ? lockedByDaily.actividad : null);
+      
+      return {
+        ...u,
+        isLocked: !!lockedTaskName,
+        lockedTaskName
+      };
+    });
+
+    res.json(usuariosEnriquecidos);
   });
 
   // Health check for GCP/Cosmos
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Endpoint de Productividad Global
+  app.get("/api/productividad", (req, res) => {
+    const { fecha } = req.query;
+    if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
+    
+    const usuarios = db.prepare("SELECT id, nombre, email, role FROM Usuarios WHERE role = 'operador'").all();
+    
+    const tareas = db.prepare(`
+      SELECT T.*, U.nombre as user_name 
+      FROM Tareas T 
+      JOIN Usuarios U ON T.user_id = U.id 
+      WHERE T.fecha = ?
+    `).all(fecha);
+
+    const userStats = usuarios.map((u: any) => {
+      const userTasks = tareas.filter((t: any) => t.user_id === u.id);
+      const completadas = userTasks.filter((t: any) => t.estado_ejecucion === 'completado' || t.estado_ejecucion === 'resuelto').length;
+      const pendientes = userTasks.length - completadas;
+      return {
+        id: u.id,
+        nombre: u.nombre,
+        email: u.email,
+        total_tareas: userTasks.length,
+        completadas,
+        pendientes,
+        tareas: userTasks
+      };
+    });
+
+    res.json({ stats: userStats });
   });
 
   // 1. Configuracion
@@ -216,19 +392,20 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  // 2. Tareas
   app.get("/api/tareas", (req, res) => {
-    const { fecha } = req.query;
+    const { fecha, userId } = req.query;
     if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
+    const uid = parseInt(userId as string) || 1;
 
-    const tasks = db.prepare("SELECT * FROM Tareas WHERE fecha = ?").all(fecha);
+    const tasks = db.prepare("SELECT * FROM Tareas WHERE fecha = ? AND user_id = ?").all(fecha, uid);
 
     // Also fetch/calculate the daily plan for this date to support the frontend logic
-    let plan = db.prepare("SELECT * FROM PlanesDiarios WHERE date = ?").get(fecha);
+    let plan = db.prepare("SELECT * FROM PlanesDiarios WHERE date = ?").get(fecha) as any;
     if (!plan) {
       const config = db.prepare("SELECT * FROM Configuracion WHERE id = 1").get();
       plan = {
         date: fecha,
+        user_id: uid,
         hora_inicio: config.hora_inicio,
         hora_fin: config.hora_fin,
         horas_efectivas: config.horas_efectivas,
@@ -236,6 +413,8 @@ async function startServer() {
         ejecucion_iniciada: 0,
         hora_inicio_ejecucion: null
       };
+    } else {
+      plan.user_id = uid;
     }
 
     res.json({ tasks, plan });
@@ -247,9 +426,54 @@ async function startServer() {
   });
 
   app.post("/api/tareas", (req, res) => {
-    const { fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area } = req.body;
-    db.prepare("INSERT INTO Tareas (fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(fecha, actividad, prioridad, tiempo_asignado_minutos || null, fecha_origen_remanente || null, backlog_id || null, estado_ejecucion || null, evidencia || null, area || null);
+    const { fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area, assignedUsers, userId, complejidad } = req.body;
+    
+    const uid = parseInt(userId as string) || 1;
+    const todayStr = new Date().toLocaleDateString('sv-SE');
+
+    // Block if assigning to today or future, and there is an unclosed past workday
+    if (fecha >= todayStr) {
+      const unclosedPastDay = db.prepare(`
+        SELECT DISTINCT T.fecha 
+        FROM Tareas T
+        LEFT JOIN PlanesDiarios P ON T.fecha = P.date
+        WHERE T.fecha < ? AND T.user_id = ? AND (P.estado_cierre IS NULL OR P.estado_cierre = 0)
+        ORDER BY T.fecha ASC
+        LIMIT 1
+      `).get(todayStr, uid) as { fecha: string } | undefined;
+
+      if (unclosedPastDay) {
+        return res.status(400).json({ 
+          error: "Días anteriores pendientes de cierre", 
+          unclosedDate: unclosedPastDay.fecha,
+          message: `Bloqueo de Planificación: Tienes un día anterior sin cerrar (${unclosedPastDay.fecha}). Por favor, justifica sus tareas y cierra la jornada de ese día antes de planificar o iniciar nuevas actividades para hoy.`
+        });
+      }
+    }
+    
+    const usersToAssign = (assignedUsers && assignedUsers.length > 0) ? assignedUsers : [userId || 1];
+    
+    let backlogCreatedAt: string | null = null;
+    if (backlog_id) {
+      const bg = db.prepare("SELECT created_at FROM Backlog WHERE id = ?").get(backlog_id) as { created_at: string } | undefined;
+      if (bg && bg.created_at) {
+        backlogCreatedAt = bg.created_at;
+      }
+    }
+    const nowStr = new Date().toISOString();
+    const finalCreatedAt = backlogCreatedAt || nowStr;
+    const finalAssignedAt = nowStr;
+
+    db.transaction(() => {
+      const stmt = db.prepare("INSERT INTO Tareas (fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area, user_id, complejidad, created_at, assigned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+      for(const uid of usersToAssign) {
+        const valTiempo = (tiempo_asignado_minutos !== undefined && tiempo_asignado_minutos !== null) ? tiempo_asignado_minutos : null;
+        stmt.run(fecha, actividad, prioridad, valTiempo, fecha_origen_remanente || null, backlog_id || null, estado_ejecucion || null, evidencia || null, area || null, uid, complejidad || 2, finalCreatedAt, finalAssignedAt);
+      }
+      if (backlog_id) {
+        db.prepare("UPDATE Backlog SET status = 'progreso' WHERE id = ?").run(backlog_id);
+      }
+    })();
     res.json({ success: true });
   });
 
@@ -284,6 +508,14 @@ async function startServer() {
       updates.push("estado_ejecucion = ?");
       params.push(estado_ejecucion);
       finalCompletada = (['terminada', 'resuelto'].includes(estado_ejecucion) ? 1 : 0);
+      
+      const closedStatuses = ['resuelto', 'terminada', 'fallo', 'fallido', 'despriorizado', 'despriorizada', 'no realizado'];
+      if (closedStatuses.includes(estado_ejecucion.toLowerCase())) {
+        updates.push("closed_at = ?");
+        params.push(new Date().toISOString());
+      } else {
+        updates.push("closed_at = NULL");
+      }
     }
 
     if (finalCompletada !== undefined) {
@@ -352,7 +584,13 @@ async function startServer() {
 
   app.delete("/api/tareas/:id", (req, res) => {
     const { id } = req.params;
-    db.prepare("DELETE FROM Tareas WHERE id = ?").run(id);
+    db.transaction(() => {
+      const task = db.prepare("SELECT backlog_id FROM Tareas WHERE id = ?").get(id) as { backlog_id: number | null } | undefined;
+      if (task && task.backlog_id) {
+        db.prepare("UPDATE Backlog SET status = 'pendiente' WHERE id = ?").run(task.backlog_id);
+      }
+      db.prepare("DELETE FROM Tareas WHERE id = ?").run(id);
+    })();
     res.json({ success: true });
   });
 
@@ -383,12 +621,18 @@ async function startServer() {
       const tasksToSync = db.prepare(`
         SELECT backlog_id, estado_ejecucion 
         FROM Tareas 
-        WHERE fecha = ? AND backlog_id IS NOT NULL AND estado_ejecucion != 'no realizado'
+        WHERE fecha = ? AND backlog_id IS NOT NULL
       `).all(date);
 
       for (const task of tasksToSync) {
         let backlogStatus = task.estado_ejecucion;
-        if (backlogStatus === 'despriorizada') backlogStatus = 'despriorizado';
+        if (backlogStatus === 'no realizado' || backlogStatus === 'fallo' || backlogStatus === 'fallido' || !backlogStatus) {
+          backlogStatus = 'pendiente';
+        } else if (backlogStatus === 'despriorizada') {
+          backlogStatus = 'despriorizado';
+        } else if (backlogStatus === 'resuelto' || backlogStatus === 'terminada') {
+          backlogStatus = 'terminada';
+        }
         db.prepare("UPDATE Backlog SET status = ? WHERE id = ?").run(backlogStatus, task.backlog_id);
       }
     }
@@ -411,55 +655,135 @@ async function startServer() {
   // 3. Incidencias
   app.get("/api/incidencias", (req, res) => {
     const { fecha } = req.query;
+    const userId = parseInt(req.query.userId as string) || 1;
     if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
-    const incidents = db.prepare("SELECT * FROM Incidencias WHERE fecha = ?").all(fecha);
+    const incidents = db.prepare("SELECT * FROM Incidencias WHERE fecha = ? AND user_id = ?").all(fecha, userId);
     res.json(incidents);
   });
 
   app.post("/api/incidencias", (req, res) => {
-    const { fecha, descripcion, hora_inicio, hora_fin, tipo } = req.body;
-    db.prepare("INSERT INTO Incidencias (fecha, descripcion, hora_inicio, hora_fin, tipo) VALUES (?, ?, ?, ?, ?)")
-      .run(fecha, descripcion, hora_inicio, hora_fin, tipo);
+    const { fecha, descripcion, hora_inicio, hora_fin, tipo, userId } = req.body;
+    const uid = parseInt(userId as string) || 1;
+    db.prepare("INSERT INTO Incidencias (fecha, descripcion, hora_inicio, hora_fin, tipo, user_id) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(fecha, descripcion, hora_inicio, hora_fin, tipo, uid);
+    db.prepare("INSERT INTO BloquesNoDisponibles (fecha, hora_inicio, hora_fin, tipo, dia_semana, descripcion, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(fecha, hora_inicio, hora_fin, tipo, null, "Incidencia: " + descripcion, uid);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/incidencias/:id", (req, res) => {
+    const { id } = req.params;
+    const incident = db.prepare("SELECT * FROM Incidencias WHERE id = ?").get(id) as any;
+    if (incident) {
+      db.prepare("DELETE FROM Incidencias WHERE id = ?").run(id);
+      db.prepare("DELETE FROM BloquesNoDisponibles WHERE fecha = ? AND hora_inicio = ? AND hora_fin = ? AND tipo = ? AND descripcion = ? AND user_id = ?")
+        .run(incident.fecha, incident.hora_inicio, incident.hora_fin, incident.tipo, "Incidencia: " + incident.descripcion, incident.user_id);
+    }
     res.json({ success: true });
   });
 
   // 4. Bloques No Disponibles
   app.get("/api/bloques", (req, res) => {
     const { fecha } = req.query;
+    const userId = parseInt(req.query.userId as string) || 1;
     if (fecha) {
-      const blocks = db.prepare("SELECT * FROM BloquesNoDisponibles WHERE fecha = ? OR dia_semana IS NOT NULL").all(fecha);
+      const blocks = db.prepare("SELECT * FROM BloquesNoDisponibles WHERE (fecha = ? OR dia_semana IS NOT NULL) AND user_id = ?").all(fecha, userId);
       res.json(blocks);
     } else {
-      const blocks = db.prepare("SELECT * FROM BloquesNoDisponibles").all();
+      const blocks = db.prepare("SELECT * FROM BloquesNoDisponibles WHERE user_id = ?").all(userId);
       res.json(blocks);
     }
   });
 
   app.post("/api/bloques", (req, res) => {
-    const { fecha, hora_inicio, hora_fin, tipo, dia_semana, descripcion } = req.body;
-    db.prepare("INSERT INTO BloquesNoDisponibles (fecha, hora_inicio, hora_fin, tipo, dia_semana, descripcion) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(fecha || null, hora_inicio, hora_fin, tipo, dia_semana || null, descripcion || null);
+    const { fecha, hora_inicio, hora_fin, tipo, dia_semana, descripcion, userId } = req.body;
+    const uid = parseInt(userId as string) || 1;
+    db.prepare("INSERT INTO BloquesNoDisponibles (fecha, hora_inicio, hora_fin, tipo, dia_semana, descripcion, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(fecha || null, hora_inicio, hora_fin, tipo, dia_semana || null, descripcion || null, uid);
     res.json({ success: true });
   });
 
   app.delete("/api/bloques/:id", (req, res) => {
     const { id } = req.params;
-    db.prepare("DELETE FROM BloquesNoDisponibles WHERE id = ?").run(id);
+    const block = db.prepare("SELECT * FROM BloquesNoDisponibles WHERE id = ?").get(id) as any;
+    if (block) {
+      db.prepare("DELETE FROM BloquesNoDisponibles WHERE id = ?").run(id);
+      if (block.descripcion && block.descripcion.startsWith("Incidencia: ")) {
+        const desc = block.descripcion.replace("Incidencia: ", "");
+        db.prepare("DELETE FROM Incidencias WHERE fecha = ? AND hora_inicio = ? AND hora_fin = ? AND tipo = ? AND descripcion = ? AND user_id = ?")
+          .run(block.fecha, block.hora_inicio, block.hora_fin, block.tipo, desc, block.user_id);
+      }
+    }
     res.json({ success: true });
   });
 
   // 5. Backlog
   app.get("/api/backlog", (req, res) => {
-    const backlog = db.prepare("SELECT * FROM Backlog ORDER BY created_at DESC").all();
-    res.json(backlog);
+    const uid = parseInt(req.query.userId as string) || 1;
+    
+    // Self-healing: Reset status to 'nuevo' for tasks that are 'progreso' but have no scheduled daily tasks
+    db.prepare(`
+      UPDATE Backlog 
+      SET status = 'nuevo' 
+      WHERE status = 'progreso' 
+        AND id NOT IN (SELECT DISTINCT backlog_id FROM Tareas WHERE backlog_id IS NOT NULL)
+    `).run();
+
+    const backlog = db.prepare(`
+      SELECT DISTINCT b.*, 
+             t.fecha as scheduled_date, 
+             t.estado_ejecucion as execution_status
+      FROM Backlog b
+      LEFT JOIN Tareas t ON b.id = t.backlog_id 
+        AND t.fecha = (SELECT MAX(fecha) FROM Tareas WHERE backlog_id = b.id)
+      LEFT JOIN BacklogAsignaciones ba ON b.id = ba.backlog_id
+      WHERE b.owner_id = ? OR (b.is_collaborative = 1 AND ba.user_id = ?)
+      ORDER BY 
+        CASE 
+          WHEN b.status IN ('nuevo', 'abierto', 'pendiente') THEN 0 
+          ELSE 1 
+        END ASC,
+        b.created_at ASC
+    `).all(uid, uid);
+    const assignments = db.prepare("SELECT backlog_id, user_id FROM BacklogAsignaciones").all();
+    
+    const assignmentsMap: Record<number, number[]> = {};
+    assignments.forEach((a: any) => {
+      if (!assignmentsMap[a.backlog_id]) {
+        assignmentsMap[a.backlog_id] = [];
+      }
+      assignmentsMap[a.backlog_id].push(a.user_id);
+    });
+
+    const result = backlog.map((item: any) => ({
+      ...item,
+      is_collaborative: item.is_collaborative === 1,
+      assignedUsers: assignmentsMap[item.id] || []
+    }));
+    res.json(result);
   });
 
   app.get("/api/backlog/recommend", (req, res) => {
     const { lastArea } = req.query;
+    const uid = parseInt(req.query.userId as string) || 1;
     
-    // Fetch all pending backlog items
-    const items = db.prepare("SELECT * FROM Backlog WHERE status = 'pendiente'").all();
+    // Fetch all pending backlog items visible to the user
+    const items = db.prepare(`
+      SELECT DISTINCT b.* 
+      FROM Backlog b
+      LEFT JOIN BacklogAsignaciones ba ON b.id = ba.backlog_id
+      WHERE b.status = 'pendiente' AND (b.owner_id = ? OR (b.is_collaborative = 1 AND ba.user_id = ?))
+    `).all(uid, uid);
+    const assignments = db.prepare("SELECT backlog_id, user_id FROM BacklogAsignaciones").all();
     
+    const assignmentsMap: Record<number, number[]> = {};
+    assignments.forEach((a: any) => {
+      if (!assignmentsMap[a.backlog_id]) {
+        assignmentsMap[a.backlog_id] = [];
+      }
+      assignmentsMap[a.backlog_id].push(a.user_id);
+    });
+
     const now = new Date();
     
     const recommended = items.map((item: any) => {
@@ -490,6 +814,8 @@ async function startServer() {
       
       return {
         ...item,
+        is_collaborative: item.is_collaborative === 1,
+        assignedUsers: assignmentsMap[item.id] || [],
         urgencia: parseFloat(U.toFixed(1)),
         impacto: I,
         dependencia: D,
@@ -505,30 +831,75 @@ async function startServer() {
   });
 
   app.post("/api/backlog", (req, res) => {
-    const { actividad, prioridad, status, area } = req.body;
-    const result = db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area) VALUES (?, ?, ?, ?)")
-      .run(actividad, prioridad || 4, status || 'pendiente', area || null);
-    res.json({ id: result.lastInsertRowid, success: true });
+    const { actividad, prioridad, status, area, is_collaborative, assignedUsers, userId, complejidad, tiempo_estimado, rol_ejecutante } = req.body;
+    const uid = userId || 1;
+    const isCollab = is_collaborative ? 1 : 0;
+    
+    const result = db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area, is_collaborative, owner_id, complejidad, tiempo_estimado, rol_ejecutante) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(actividad, prioridad || 4, status || 'nuevo', area || null, isCollab, uid, complejidad || 2, tiempo_estimado || 60, rol_ejecutante || 'Calidad Fabrica');
+      
+    const newId = result.lastInsertRowid;
+    if (isCollab && assignedUsers && Array.isArray(assignedUsers)) {
+       const stmt = db.prepare("INSERT INTO BacklogAsignaciones (backlog_id, user_id) VALUES (?, ?)");
+       // Add the owner and the assigned users
+       const allUsers = Array.from(new Set([uid, ...assignedUsers]));
+       allUsers.forEach(u => stmt.run(newId, u));
+    }
+    
+    res.json({ id: newId, success: true });
   });
 
   app.put("/api/backlog/:id", (req, res) => {
     const { id } = req.params;
-    const { actividad, prioridad, status, area } = req.body;
+    const { actividad, prioridad, status, area, is_collaborative, assignedUsers, userId, complejidad, tiempo_estimado, rol_ejecutante, justificacion } = req.body;
     const updates = [];
     const params = [];
     if (actividad !== undefined) { updates.push("actividad = ?"); params.push(actividad); }
     if (prioridad !== undefined) { updates.push("prioridad = ?"); params.push(prioridad); }
     if (status !== undefined) { updates.push("status = ?"); params.push(status); }
     if (area !== undefined) { updates.push("area = ?"); params.push(area); }
+    if (complejidad !== undefined) { updates.push("complejidad = ?"); params.push(complejidad); }
+    if (tiempo_estimado !== undefined) { updates.push("tiempo_estimado = ?"); params.push(tiempo_estimado); }
+    if (rol_ejecutante !== undefined) { updates.push("rol_ejecutante = ?"); params.push(rol_ejecutante); }
+    if (justificacion !== undefined) { updates.push("justificacion = ?"); params.push(justificacion); }
+    if (is_collaborative !== undefined) { 
+      updates.push("is_collaborative = ?"); 
+      params.push(is_collaborative ? 1 : 0); 
+    }
     if (updates.length > 0) {
       params.push(id);
       db.prepare(`UPDATE Backlog SET ${updates.join(", ")} WHERE id = ?`).run(...params);
     }
+
+    if (is_collaborative !== undefined || assignedUsers !== undefined) {
+      const task = db.prepare("SELECT is_collaborative, owner_id FROM Backlog WHERE id = ?").get(id) as any;
+      const isCollab = is_collaborative !== undefined ? (is_collaborative ? 1 : 0) : (task?.is_collaborative || 0);
+      const ownerId = task?.owner_id || userId || 1;
+
+      if (isCollab === 1) {
+        let usersToAssign = [];
+        if (assignedUsers !== undefined) {
+          usersToAssign = Array.isArray(assignedUsers) ? assignedUsers : [];
+        } else {
+          const existing = db.prepare("SELECT user_id FROM BacklogAsignaciones WHERE backlog_id = ?").all(id) as any[];
+          usersToAssign = existing.map(e => e.user_id);
+        }
+        
+        db.prepare("DELETE FROM BacklogAsignaciones WHERE backlog_id = ?").run(id);
+        const stmt = db.prepare("INSERT INTO BacklogAsignaciones (backlog_id, user_id) VALUES (?, ?)");
+        const allUsers = Array.from(new Set([ownerId, ...usersToAssign]));
+        allUsers.forEach(u => stmt.run(id, u));
+      } else {
+        db.prepare("DELETE FROM BacklogAsignaciones WHERE backlog_id = ?").run(id);
+      }
+    }
+
     res.json({ success: true });
   });
 
   app.delete("/api/backlog/:id", (req, res) => {
     const { id } = req.params;
+    db.prepare("DELETE FROM BacklogAsignaciones WHERE backlog_id = ?").run(id);
     db.prepare("DELETE FROM Backlog WHERE id = ?").run(id);
     res.json({ success: true });
   });
@@ -557,6 +928,40 @@ async function startServer() {
   app.get("/api/tareas/todas", (req, res) => {
     const tasks = db.prepare("SELECT * FROM Tareas ORDER BY fecha DESC, prioridad DESC").all();
     res.json(tasks);
+  });
+
+  app.get("/api/reporte-tiempos", (req, res) => {
+    const { userId, fechaInicio, fechaFin } = req.query;
+    
+    let query = `
+      SELECT T.*, U.nombre as user_name, U.email as user_email
+      FROM Tareas T
+      JOIN Usuarios U ON T.user_id = U.id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    
+    if (userId && userId !== 'all') {
+      query += " AND T.user_id = ?";
+      params.push(parseInt(userId as string));
+    }
+    if (fechaInicio) {
+      query += " AND T.fecha >= ?";
+      params.push(fechaInicio);
+    }
+    if (fechaFin) {
+      query += " AND T.fecha <= ?";
+      params.push(fechaFin);
+    }
+    
+    query += " ORDER BY T.fecha DESC, T.id DESC";
+    
+    try {
+      const tasks = db.prepare(query).all(...params);
+      res.json({ success: true, tasks });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   app.get("/api/history/accumulated", (req, res) => {
@@ -633,11 +1038,16 @@ async function startServer() {
 
   app.post("/api/reset-database", (req, res) => {
     db.transaction(() => {
+      db.prepare("DELETE FROM LogsTareas").run();
+      db.prepare("DELETE FROM BacklogAsignaciones").run();
       db.prepare("DELETE FROM Tareas").run();
       db.prepare("DELETE FROM PlanesDiarios").run();
       db.prepare("DELETE FROM Incidencias").run();
       db.prepare("DELETE FROM BloquesNoDisponibles").run();
       db.prepare("DELETE FROM Backlog").run();
+      db.prepare("DELETE FROM UsuariosEquipos").run();
+      db.prepare("DELETE FROM Equipos").run();
+      db.prepare("DELETE FROM Usuarios").run();
       db.prepare("UPDATE Configuracion SET hora_inicio = '08:00', hora_fin = '17:00', horas_efectivas = 6.0 WHERE id = 1").run();
     })();
     res.json({ success: true, message: "Base de datos reiniciada correctamente" });
@@ -649,6 +1059,20 @@ async function startServer() {
     const currentDayName = dayNames[new Date().getDay()];
 
     db.transaction(() => {
+      // 0. Usuarios Mock
+      const stmtUser = db.prepare("INSERT OR IGNORE INTO Usuarios (nombre, email, initials, role, rol_ejecutante) VALUES (?, ?, ?, ?, ?)");
+      const users = [];
+      users.push(['Calidad LATAM 01', 'calidadlatam01@latam.com', 'LA', 'operador', 'Calidad LATAM']);
+      users.push(['Calidad LATAM 02', 'calidadlatam02@latam.com', 'LA', 'operador', 'Calidad LATAM']);
+      for(let i=1; i<=5; i++) {
+        const num = i.toString().padStart(2, '0');
+        // Alternar rol ejecutante
+        users.push([`Calidad PE ${num}`, `Calidadpe${num}@latam.com`, `PE`, 'operador', i % 2 === 0 ? 'Calidad LATAM' : 'Calidad Fabrica']);
+        users.push([`Calidad BR ${num}`, `Calidadbr${num}@latam.com`, `BR`, 'operador', i % 2 === 0 ? 'Calidad Fabrica' : 'Calidad LATAM']);
+        users.push([`Calidad CO ${num}`, `Calidadco${num}@latam.com`, `CO`, 'operador', i % 3 === 0 ? 'Calidad LATAM' : 'Calidad Fabrica']);
+      }
+      users.forEach(u => stmtUser.run(...u));
+
       // 1. Backlog
       const backlogItems = [
         ['Monitoreo de Llamadas - Campaña A', 10, 'pendiente', 'Monitoreo'],
@@ -732,14 +1156,42 @@ async function startServer() {
     try {
       const { text } = req.body;
       const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
-      const response = await model.generateContent(`Analiza el siguiente texto libre y extrae una lista de actividades concretas para un backlog. 
-        Para cada actividad:
-        1. Asigna una prioridad basada en el contexto (10 para crítica, 7 para alta, 4 para media, 2 para baja).
-        
-        El formato de salida debe ser un JSON array de objetos con las propiedades "actividad" y "prioridad".
-        
-        Texto: "${text}"`);
+      const prompt = `Analiza el siguiente texto libre y conviértelo en una actividad clara y profesional para un backlog operativo.
+      
+REGLA MUY IMPORTANTE: NO dividas ni desgloses el texto en múltiples tareas. Devuelve SIEMPRE 1 sola actividad (a menos que haya viñetas claras).
 
+TU OBJETIVO PRINCIPAL:
+1. Mejora la redacción del texto libre y guárdalo en la propiedad "actividad" tal como el usuario lo pidió (NO lo reemplaces por el título del catálogo).
+2. Evalúa las palabras del usuario e intenta encontrar su mayor similitud lógica con el siguiente CATÁLOGO OFICIAL:
+
+[CATÁLOGO - Calidad Fabrica]
+- "Revisión de indicadores entregados por RADAR" (complejidad: 1, tiempo: 60)
+- "Hipótesis: planteamiento + contexto operacional (en plataforma)" (complejidad: 2, tiempo: 75)
+- "Escuchas y validacion de hipotesis (en plataforma)" (complejidad: 2, tiempo: 165)
+- "Validación hipótesis en conjunto con LCoach" (complejidad: 1, tiempo: 60)
+- "Análisis con IA: descarga LEA + armado para análisis IA" (complejidad: 3, tiempo: 60)
+- "Armar slide y plan de acción para seguimiento" (complejidad: 2, tiempo: 60)
+- "Seguimiento de focos (en plataforma)" (complejidad: 2, tiempo: 60)
+
+[CATÁLOGO - Calidad LATAM]
+- "Análisis profundo IA + escuchas" (complejidad: 3, tiempo: 240)
+- "Auditorias BOT" (complejidad: 1, tiempo: 180)
+- "Auditorias PCA/PTA" (complejidad: 2, tiempo: 240)
+- "Revisión levantamientos Operación" (complejidad: 1, tiempo: 30)
+- "Calibraciones" (complejidad: 1, tiempo: 60)
+
+3. Con base en esa similitud, extrae en secreto y asigna automáticamente las propiedades "complejidad", "tiempo_estimado" y "rol_ejecutante" según el catálogo. Si no logras encontrar similitud, asume por defecto complejidad 2, tiempo 60 y rol "Calidad Fabrica".
+4. Asigna una "prioridad" lógica entre 7 (para alta), 4 (para media) o 2 (para baja). La IA NO debe asignar la prioridad 10 (crítica), ya que esta prioridad es exclusiva para asignación manual del usuario. REGLA CRÍTICA DE PRIORIDAD: Si la complejidad asignada según el catálogo es 1 (baja), la prioridad NO puede ser alta (7) y debes asignar obligatoriamente prioridad media (4) o baja (2).
+5. Asigna el "area" más lógica ("Operativo", "Monitoreo", "Tendencias", "Escuelita", "Calidad").
+
+El formato de salida debe ser ESTRICTAMENTE un JSON array de objetos con:
+"actividad" (string), "prioridad" (number), "area" (string), "complejidad" (number), "tiempo_estimado" (number), "rol_ejecutante" (string).
+
+REGLA CRÍTICA: SOLO DEBES RESPONDER CON EL JSON ARRAY y absolutamente nada de texto adicional. Ni "Aquí tienes", ni explicaciones. Solo el JSON.
+
+Texto a analizar: "${text}"`;
+
+      const response = await model.generateContent(prompt);
       let jsonText = response.response.text() || "[]";
       jsonText = jsonText.replace(/```json\n?|```/g, "");
       res.json(JSON.parse(jsonText));

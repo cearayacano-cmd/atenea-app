@@ -191,6 +191,13 @@ export default function FocusView({ selectedDate }: { selectedDate: string }) {
         })
       });
       
+      if (!res.ok) {
+        const errorData = await res.json();
+        window.alert(errorData.message || "Error al iniciar el enfoque");
+        setIsLoading(false);
+        return;
+      }
+      
       // 2. Update status in Backlog to 'en curso'
       await fetch(`/api/backlog/${item.id}`, {
         method: 'PUT',
@@ -203,6 +210,7 @@ export default function FocusView({ selectedDate }: { selectedDate: string }) {
       await fetchData();
     } catch (err) {
       console.error('Error starting focus:', err);
+      setIsLoading(false);
     }
   };
 
@@ -254,7 +262,7 @@ export default function FocusView({ selectedDate }: { selectedDate: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           estado_ejecucion: 'fallo',
-          justificacion
+          justificacion: justification
         })
       });
 

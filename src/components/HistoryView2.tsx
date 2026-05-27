@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Filter, Calendar, Clock, Link as LinkIcon, Paperclip, AlertTriangle, CheckCircle2, Circle, ChevronDown, ChevronUp, Sparkles, Loader2, History } from 'lucide-react';
 import { motion } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
-
+import { getStatusColor, getPriorityColor } from '../utils/colors';
 interface Task {
   actividad: string;
   area?: string;
@@ -14,31 +14,8 @@ interface Task {
   fechas: string[];
   completada: boolean;
   tiempos?: { fecha: string; minutos: number }[];
+  logs?: any[];
 }
-
-const getPriorityInfo = (value: number) => {
-  switch (value) {
-    case 10: return { label: 'CRÍTICA', color: 'bg-accent/10 text-accent border-accent/20' };
-    case 7: return { label: 'ALTA', color: 'bg-primary/10 text-primary border-primary/20' };
-    case 4: return { label: 'MEDIA', color: 'bg-blue-50 text-blue-600 border-blue-100' };
-    case 2: return { label: 'BAJA', color: 'bg-slate-100 text-slate-700 border-slate-200' };
-    default: return { label: 'MEDIA', color: 'bg-blue-50 text-blue-600 border-blue-100' };
-  }
-};
-
-const getStatusColor = (status: string) => {
-  switch (status.toLowerCase()) {
-    case 'nuevo': return 'bg-amber-50 text-amber-600 border-amber-100';
-    case 'abierto': return 'bg-red-50 text-red-600 border-red-100';
-    case 'pendiente': return 'bg-sky-50 text-sky-500 border-sky-100';
-    case 'en espera': return 'bg-slate-900 text-white border-slate-900';
-    case 'resuelto': return 'bg-slate-100 text-slate-500 border-slate-200';
-    case 'despriorizado': return 'bg-slate-50 text-slate-400 border-slate-100';
-    case 'fallo':
-    case 'fallido': return 'bg-rose-50 text-rose-700 border-rose-100';
-    default: return 'bg-slate-50 text-slate-600 border-slate-100';
-  }
-};
 
 const STATUS_OPTIONS = [
   { id: 'all', label: 'Todos los Estados' },
@@ -255,7 +232,7 @@ export default function HistoryView() {
           {filteredTasks.map((task, idx) => {
             const taskKey = `${task.actividad}-${task.area}`;
             const isExpanded = expandedTasks.includes(taskKey);
-            const priority = getPriorityInfo(task.prioridad);
+            const priority = getPriorityColor(task.prioridad);
 
             return (
               <motion.div 
@@ -269,9 +246,10 @@ export default function HistoryView() {
                 onClick={() => toggleExpand(taskKey)}
               >
                 {/* Fondo sutil de Glassmorphism en el header */}
-                <div className={`absolute top-0 left-0 right-0 h-1 transition-colors duration-500 ${
-                   task.prioridad >= 10 ? 'bg-red-500' : task.prioridad >= 7 ? 'bg-amber-400' : 'bg-primary'
-                }`} />
+                <div 
+                   className="absolute top-0 left-0 right-0 h-1 transition-colors duration-500" 
+                   style={{ backgroundColor: priority.hex }}
+                />
 
                 <div className="flex flex-col h-full">
                   {/* Header: Status y Progreso */}
@@ -285,8 +263,8 @@ export default function HistoryView() {
                            <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">Ejecuciones</span>
                         </div>
                      </div>
-                     <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase border shadow-sm backdrop-blur-md ${getStatusColor(task.backlog_status || 'resuelto')}`}>
-                        {task.backlog_status?.toUpperCase() || 'RESUELTO'}
+                     <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase border shadow-sm backdrop-blur-md ${getStatusColor(task.backlog_status || 'resuelto').badge} ${getStatusColor(task.backlog_status || 'resuelto').badgeBorder}`}>
+                        {getStatusColor(task.backlog_status || 'resuelto').label}
                      </div>
                   </div>
 
@@ -294,7 +272,7 @@ export default function HistoryView() {
                   <div className="p-6 flex-1 flex flex-col justify-between">
                      <div className="space-y-4">
                         <h4 className={`text-sm font-black leading-snug transition-colors duration-500 ${isExpanded ? 'text-primary' : 'text-slate-800'}`}>
-                           {task.actividad.split(' - Día')[0]}
+                           {task.actividad.split(' - Dia')[0]}
                         </h4>
                         <div className="flex items-center gap-2">
                            <div className={`w-2 h-2 rounded-full animate-pulse ${
@@ -312,11 +290,7 @@ export default function HistoryView() {
                            <div className="w-1.5 h-1.5 rounded-full bg-[#00D6CC]" />
                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{task.area || 'CORE'}</span>
                         </div>
-                        <span className={`px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest border shadow-inner ${
-                           task.prioridad >= 10 ? 'bg-red-50 text-red-500 border-red-100' :
-                           task.prioridad >= 7 ? 'bg-amber-50 text-amber-500 border-amber-100' :
-                           'bg-slate-50 text-slate-400 border-slate-100'
-                        }`}>
+                        <span className={`px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest border shadow-inner ${priority.badge}`}>
                            {priority.label}
                         </span>
                      </div>
@@ -462,18 +436,17 @@ export default function HistoryView() {
                             <div className="space-y-3 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-slate-100">
                               {[...task.logs].sort((a: any, b: any) => new Date(b.hora).getTime() - new Date(a.hora).getTime()).map((log: any, i: number) => (
                                 <div key={i} className="relative pl-8 group">
-                                  <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full border-4 border-white shadow-sm flex items-center justify-center transition-all group-hover:scale-110 ${
-                                    log.estado_nuevo === 'resuelto' ? 'bg-emerald-500' : 
-                                    log.estado_nuevo === 'abierto' ? 'bg-red-500' : 
-                                    'bg-slate-200'
-                                  }`} />
+                                  <div 
+                                    className="absolute left-0 top-1.5 w-6 h-6 rounded-full border-4 border-white shadow-sm flex items-center justify-center transition-all group-hover:scale-110" 
+                                    style={{ backgroundColor: getStatusColor(log.estado_nuevo).hex }}
+                                  />
                                   <div className="p-3 bg-white border border-slate-50 rounded-2xl shadow-sm hover:border-primary/20 transition-all">
                                     <div className="flex justify-between items-center mb-1">
                                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
                                         {log.fecha} • {log.comentario?.split('las ')[1] || log.hora?.split('T')[1]?.slice(0,5) || 'HH:MM'}
                                       </span>
-                                      <span className={`text-[8px] font-black px-2 py-0.5 rounded-md border ${getStatusColor(log.estado_nuevo)}`}>
-                                        {log.estado_nuevo?.toUpperCase()}
+                                      <span className={`text-[8px] font-black px-2 py-0.5 rounded-md border ${getStatusColor(log.estado_nuevo).badge} ${getStatusColor(log.estado_nuevo).badgeBorder}`}>
+                                        {getStatusColor(log.estado_nuevo).label}
                                       </span>
                                     </div>
                                     <p className="text-[11px] font-medium text-slate-600 italic">

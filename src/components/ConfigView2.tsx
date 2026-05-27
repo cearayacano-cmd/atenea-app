@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Save, Calendar, Clock, Trash2, Plus, Wand2, ListChecks, Database, ArrowRight, X, LayoutList, AlertTriangle } from 'lucide-react';
+import { Save, Calendar, Clock, Trash2, Plus, Wand2, ListChecks, Database, ArrowRight, X, LayoutList, AlertTriangle, Archive, Users, User, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { getStatusColor, getPriorityColor } from '../utils/colors';
 
 interface Bloque {
   id: number;
@@ -18,20 +19,56 @@ interface BacklogItem {
   status: string;
   area?: string;
   created_at: string;
+  is_collaborative?: boolean;
+  assignedUsers?: number[];
+  complejidad?: number;
+  tiempo_estimado?: number;
+  rol_ejecutante?: string;
+  owner_id?: number;
+  justificacion?: string;
+  scheduled_date?: string;
+  execution_status?: string;
 }
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 const TIPOS_BLOQUE = ['Almuerzo', 'Reunión', 'Personal', 'Otro'];
+
 const PRIORITIES = [
-  { label: 'CRÍTICA', value: 10, color: 'bg-accent' },
-  { label: 'ALTA', value: 7, color: 'bg-primary' },
-  { label: 'MEDIA', value: 4, color: 'bg-[#00A6D4]' },
-  { label: 'BAJA', value: 2, color: 'bg-[#B8B8B8]' },
+  { label: 'CRÍTICA', value: 10, color: 'bg-red-600' },
+  { label: 'ALTA', value: 7, color: 'bg-orange-500' },
+  { label: 'MEDIA', value: 4, color: 'bg-amber-500' },
+  { label: 'BAJA', value: 2, color: 'bg-emerald-500' },
 ];
 
+const MATRIZ_TAREAS: Record<string, { actividad: string; complejidad: number; tiempo_estimado: number; area: string }[]> = {
+  'Calidad Fabrica': [
+    { actividad: 'Revisión de indicadores entregados por RADAR', complejidad: 1, tiempo_estimado: 60, area: 'Calidad' },
+    { actividad: 'Hipótesis: planteamiento + contexto operacional (en plataforma)', complejidad: 2, tiempo_estimado: 75, area: 'Operativo' },
+    { actividad: 'Escuchas y validacion de hipotesis (en plataforma)', complejidad: 2, tiempo_estimado: 165, area: 'Monitoreo' },
+    { actividad: 'Validación hipótesis en conjunto con LCoach', complejidad: 1, tiempo_estimado: 60, area: 'Operativo' },
+    { actividad: 'Análisis con IA: descarga LEA + armado para análisis IA', complejidad: 3, tiempo_estimado: 60, area: 'Tendencias' },
+    { actividad: 'Armar slide y plan de acción para seguimiento', complejidad: 2, tiempo_estimado: 60, area: 'Tendencias' },
+    { actividad: 'Seguimiento de focos (en plataforma)', complejidad: 2, tiempo_estimado: 60, area: 'Operativo' }
+  ],
+  'Calidad LATAM': [
+    { actividad: 'Análisis profundo IA + escuchas', complejidad: 3, tiempo_estimado: 240, area: 'Escuelita' },
+    { actividad: 'Auditorias BOT', complejidad: 1, tiempo_estimado: 180, area: 'Monitoreo' },
+    { actividad: 'Auditorias PCA/PTA', complejidad: 2, tiempo_estimado: 240, area: 'Calidad' },
+    { actividad: 'Revisión levantamientos Operación', complejidad: 1, tiempo_estimado: 30, area: 'Operativo' },
+    { actividad: 'Calibraciones', complejidad: 1, tiempo_estimado: 60, area: 'Operativo' }
+  ]
+};
+
+const toLocalYYYYMMDD = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function ConfigView2() {
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(toLocalYYYYMMDD(new Date()));
+  const [endDate, setEndDate] = useState(toLocalYYYYMMDD(new Date()));
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('17:00');
   const [isSaving, setIsSaving] = useState(false);
@@ -40,7 +77,8 @@ export default function ConfigView2() {
   // Bloques y Jornadas
   const [bloques, setBloques] = useState<Bloque[]>([]);
   const [dailyPlans, setDailyPlans] = useState<Record<string, any>>({});
-  const [newBlock, setNewBlock] = useState({ isRecurrente: false, dias: [] as string[], fecha: new Date().toISOString().split('T')[0], inicio: '13:00', fin: '14:00', tipo: 'Almuerzo', motivo: '' });
+  const [newBlock, setNewBlock] = useState({ isRecurrente: false, dias: [] as string[], fecha: toLocalYYYYMMDD(new Date()), inicio: '13:00', fin: '14:00', tipo: 'Almuerzo', motivo: '' });
+  const [isExcepcionGroupMode, setIsExcepcionGroupMode] = useState(false);
 
   // Backlog
   const [backlog, setBacklog] = useState<BacklogItem[]>([]);
@@ -58,6 +96,18 @@ export default function ConfigView2() {
   const [pendingSuggestions, setPendingSuggestions] = useState<any[]>([]);
   const [editingTask, setEditingTask] = useState<Partial<BacklogItem> | null>(null);
 
+  // Nuevos Estados para la Sincronización y Reglas de Negocio
+  const [originalPriority, setOriginalPriority] = useState<number | null>(null);
+  const [justificationText, setJustificationText] = useState('');
+  const [isButtonDropdownOpen, setIsButtonDropdownOpen] = useState(false);
+  const [usersList, setUsersList] = useState<any[]>([]);
+
+  // Filtros y paginación del Archivo de Backlog
+  const [archiveSearch, setArchiveSearch] = useState('');
+  const [archiveTimeFilter, setArchiveTimeFilter] = useState('all');
+  const [archivePage, setArchivePage] = useState(1);
+  const archiveItemsPerPage = 5;
+
   useEffect(() => {
     if (isPlanningModalOpen && selectedPlanningDate) {
       fetchPendingFromYesterday(selectedPlanningDate);
@@ -67,7 +117,7 @@ export default function ConfigView2() {
   const fetchPendingFromYesterday = async (currentDate: string) => {
     const prevDateObj = new Date(currentDate + 'T00:00:00');
     prevDateObj.setDate(prevDateObj.getDate() - 1);
-    const prevDate = prevDateObj.toISOString().split('T')[0];
+    const prevDate = toLocalYYYYMMDD(prevDateObj);
 
     try {
       const res = await fetch(`/api/tareas?fecha=${prevDate}`);
@@ -148,11 +198,15 @@ export default function ConfigView2() {
 
   const currentWeekNumber = getWeekNumber(weekDates[0]);
 
-   useEffect(() => {
+  useEffect(() => {
     fetchBloques();
     fetchBacklog();
     fetchConfig();
     fetchDailyPlans();
+    fetch('/api/usuarios')
+      .then(res => res.json())
+      .then(data => setUsersList(data))
+      .catch(err => console.error("Error fetching users:", err));
   }, []);
 
   const fetchDailyPlans = async () => {
@@ -162,7 +216,12 @@ export default function ConfigView2() {
       const plans: Record<string, any> = {};
       if (Array.isArray(data)) {
         data.forEach(d => {
-          plans[d.date] = { hora_inicio: d.hora_inicio, hora_fin: d.hora_fin };
+          plans[d.date] = { 
+            hora_inicio: d.hora_inicio, 
+            hora_fin: d.hora_fin, 
+            estado_cierre: d.estado_cierre,
+            user_id: d.user_id 
+          };
         });
       }
       setDailyPlans(plans);
@@ -197,6 +256,12 @@ export default function ConfigView2() {
     e.dataTransfer.setData('taskId', taskId.toString());
   };
 
+  // Detectar bloqueo por jornadas pasadas sin finalizar
+  const hasPastUnclosedDay = (targetDate: string) => {
+    const dates = Object.keys(dailyPlans);
+    return dates.some(dStr => dStr < targetDate && dailyPlans[dStr]?.estado_cierre === 0);
+  };
+
   const handleDropToDay = async (e: React.DragEvent, dateStr: string) => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData("taskId");
@@ -205,7 +270,12 @@ export default function ConfigView2() {
     const task = backlog.find(t => t.id === Number(taskId));
     if (!task) return;
 
-    // Check capacity before adding (Simplified check for the card drop)
+    if (hasPastUnclosedDay(dateStr)) {
+      alert("🔒 Bloqueo de Planificación: Tienes un día anterior sin cerrar. Por favor finaliza el turno del día pendiente en su Agenda Pro antes de planificar nuevas jornadas.");
+      return;
+    }
+
+    // Alerta de capacidad pero sin impedir la asignación
     const { remainingHours } = calculateTimeInfo();
     if (remainingHours <= 0) {
        const proceed = window.confirm("⚠️ CAPACIDAD ALCANZADA: La jornada de este día ya está llena. ¿Deseas forzar la carga de esta tarea?");
@@ -213,7 +283,6 @@ export default function ConfigView2() {
     }
 
     try {
-      // Crear tarea para ese día
       await fetch('/api/tareas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -221,23 +290,17 @@ export default function ConfigView2() {
           fecha: dateStr,
           actividad: task.actividad,
           prioridad: task.prioridad,
-          estado_ejecucion: 'nuevo', // Siempre nace como NUEVO al planificar
-          tiempo_asignado_minutos: 0,
+          estado_ejecucion: 'nuevo',
+          tiempo_asignado_minutos: task.tiempo_estimado || 0,
           backlog_id: task.id,
-          area: task.area
+          area: task.area,
+          complejidad: task.complejidad || 2
         }),
       });
       
-      // Actualizar el backlog para indicar que está en progreso/planificado
-      await fetch(`/api/backlog/${task.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'progreso' }) // Movido a "En Progreso" al planificar
-      });
-
       fetchBacklog();
       
-      // Feedback visual temporal
+      // Feedback visual
       const el = document.getElementById(`day-col-${dateStr}`);
       if (el) {
         el.classList.add('ring-4', 'ring-emerald-500', 'bg-emerald-50');
@@ -264,15 +327,66 @@ export default function ConfigView2() {
     e.preventDefault();
     if (!editingTask?.actividad) return;
 
+    const currentUserId = Number(localStorage.getItem('atenea_user_id') || 1);
+
+    // 1. Validar bloqueo crítico en usuarios asignados (colaborativo o individual)
+    const isSavingCritical = Number(editingTask.prioridad) === 10;
+    if (isSavingCritical) {
+      const isSelfAssigned = !editingTask.is_collaborative || (editingTask.assignedUsers || []).includes(currentUserId);
+      if (isSelfAssigned) {
+        const currentUserInfo = usersList.find(u => u.id === currentUserId);
+        const hasAnotherCritical = currentUserInfo?.isLocked && (!editingTask.id || currentUserInfo.lockedTaskName !== editingTask.actividad);
+        if (hasAnotherCritical) {
+          alert(`❌ BLOQUEO DE ACTIVIDAD CRÍTICA: Ya tienes una actividad crítica activa ("${currentUserInfo.lockedTaskName}"). No puedes asignarte otra tarea crítica hasta finalizar o despriorizar la anterior.`);
+          return;
+        }
+      }
+
+      // Advertencia para compañeros con tarea crítica activa
+      if (editingTask.is_collaborative) {
+        const colleagues = (editingTask.assignedUsers || []).filter((id: number) => id !== currentUserId);
+        const lockedColleagues = colleagues
+          .map((id: number) => usersList.find(u => u.id === id))
+          .filter((u: any) => u?.isLocked && (!editingTask.id || u.lockedTaskName !== editingTask.actividad));
+        
+        if (lockedColleagues.length > 0) {
+          const names = lockedColleagues.map((u: any) => `"${u.nombre}" (tiene activa: "${u.lockedTaskName}")`).join(', ');
+          const proceed = window.confirm(`⚠️ ADVERTENCIA DE COLABORADOR: Los siguientes compañeros ya tienen tareas críticas activas: ${names}. ¿Deseas agregarlos a esta actividad de todas formas?`);
+          if (!proceed) return;
+        }
+      }
+    }
+
+    // 2. Validar justificación de cambio de prioridad
+    if (editingTask.id && originalPriority !== null && editingTask.prioridad !== originalPriority) {
+      if (!justificationText.trim()) {
+        alert("Por favor, escribe una justificación para el cambio de prioridad.");
+        return;
+      }
+    }
+
+    // 3. Completar automáticamente complejidad y tiempo si coincide con catálogo de Matriz
+    let matchedComplexity = editingTask.complejidad || 2;
+    let matchedTime = editingTask.tiempo_estimado || 60;
+    const role = editingTask.rol_ejecutante || 'Calidad Fabrica';
+    const template = MATRIZ_TAREAS[role]?.find(t => t.actividad === editingTask.actividad);
+    if (template) {
+      matchedComplexity = template.complejidad;
+      matchedTime = template.tiempo_estimado;
+    }
+
     const method = editingTask.id ? 'PUT' : 'POST';
     const url = editingTask.id ? `/api/backlog/${editingTask.id}` : '/api/backlog';
 
-    // Asegurar que tenga fecha si es nueva
     const payload = {
       ...editingTask,
       created_at: editingTask.id ? editingTask.created_at : new Date().toISOString(),
       status: editingTask.status || 'nuevo',
-      area: editingTask.area || 'Operativo'
+      area: editingTask.area || 'Operativo',
+      complejidad: matchedComplexity,
+      tiempo_estimado: matchedTime,
+      justificacion: justificationText || undefined,
+      rol_ejecutante: role
     };
 
     await fetch(url, {
@@ -283,10 +397,12 @@ export default function ConfigView2() {
     
     setIsModalOpen(false);
     setEditingTask(null);
+    setJustificationText('');
+    setOriginalPriority(null);
     fetchBacklog();
   };
 
-   const handleSaveConfig = async (pStart?: string, pEnd?: string) => {
+  const handleSaveConfig = async (pStart?: string, pEnd?: string) => {
     setIsSaving(true);
     const start = pStart || startTime;
     const end = pEnd || endTime;
@@ -295,7 +411,7 @@ export default function ConfigView2() {
       let current = new Date(startDate + 'T00:00:00');
       const last = new Date(endDate + 'T00:00:00');
       while (current <= last) {
-        dates.push(current.toISOString().split('T')[0]);
+        dates.push(toLocalYYYYMMDD(current));
         current.setDate(current.getDate() + 1);
       }
       
@@ -347,24 +463,70 @@ export default function ConfigView2() {
       });
       const items = await res.json();
       if (Array.isArray(items)) {
-        for (const item of items) {
-          await fetch('/api/backlog', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actividad: item.actividad, prioridad: item.prioridad, status: 'pendiente' })
-          });
-        }
+         setAiSuggestions(items.map(i => ({
+           actividad: i.actividad,
+           prioridad: i.prioridad || 4,
+           complejidad: i.complejidad || 2,
+           tiempo_estimado: i.tiempo_estimado || 60,
+           area: i.area || 'Operativo',
+           rol_ejecutante: i.rol_ejecutante || 'Calidad Fabrica'
+         })));
       }
       setFreeText('');
-      fetchBacklog();
     } catch (e) { console.error(e); }
     finally { setIsProcessing(false); }
   };
 
+  const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
+
+  const handleSaveAiSuggestions = async () => {
+    for (const item of aiSuggestions) {
+      await fetch('/api/backlog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+           actividad: item.actividad, 
+           prioridad: item.prioridad, 
+           status: 'nuevo',
+           complejidad: item.complejidad,
+           tiempo_estimado: item.tiempo_estimado,
+           area: item.area,
+           rol_ejecutante: item.rol_ejecutante
+        })
+      });
+    }
+    setAiSuggestions([]);
+    setIsAiModalOpen(false);
+    fetchBacklog();
+  };
+
   const deleteBacklog = (id: number) => fetch(`/api/backlog/${id}`, { method: 'DELETE' }).then(fetchBacklog);
+
+  const handleRestoreBacklog = async (id: number) => {
+    await fetch(`/api/backlog/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'pendiente' })
+    });
+    fetchBacklog();
+  };
+
+  const handlePurgeClosedBacklog = async () => {
+    if (!window.confirm("¿Estás seguro de que deseas purgar permanentemente todas las tareas archivadas?")) return;
+    const completed = backlog.filter(t => ['resuelto', 'terminada', 'despriorizado', 'fallo', 'fallido'].includes(t.status));
+    for (const t of completed) {
+      await fetch(`/api/backlog/${t.id}`, { method: 'DELETE' });
+    }
+    fetchBacklog();
+  };
 
   const handleAssignToDayFromModal = async (task: any) => {
     if (!selectedPlanningDate) return;
+
+    if (hasPastUnclosedDay(selectedPlanningDate)) {
+      alert("🔒 Bloqueo de Planificación: Tienes un día anterior sin cerrar. Por favor finaliza el turno del día pendiente en su Agenda Pro antes de planificar nuevas jornadas.");
+      return;
+    }
     
     // Check capacity before adding
     const weights: Record<number, number> = { 10: 2, 7: 1.5, 4: 1, 2: 0.5 };
@@ -384,15 +546,12 @@ export default function ConfigView2() {
           fecha: selectedPlanningDate,
           actividad: task.actividad,
           prioridad: task.prioridad,
-          tiempo_asignado_minutos: 0,
+          tiempo_asignado_minutos: task.tiempo_estimado || 0,
           backlog_id: task.id,
-          area: task.area
+          area: task.area,
+          complejidad: task.complejidad || 2,
+          estado_ejecucion: 'nuevo'
         }),
-      });
-      await fetch(`/api/backlog/${task.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'progreso' }) 
       });
 
       setPendingSuggestions(prev => prev.filter(p => p.id !== task.id));
@@ -411,6 +570,10 @@ export default function ConfigView2() {
 
   const handleClearAllTasks = async () => {
     if (!selectedPlanningDate) return;
+    if (hasPastUnclosedDay(selectedPlanningDate)) {
+      alert("🔒 Bloqueo de Planificación: Tienes un día anterior sin cerrar.");
+      return;
+    }
     if (!window.confirm("¿Estás seguro de que deseas limpiar todas las tareas de este día?")) return;
     
     try {
@@ -429,15 +592,13 @@ export default function ConfigView2() {
       const baseHours = weights[t.prioridad] || 1;
       const status = (t.estado_ejecucion || 'nuevo').toLowerCase();
       
-      if (status === 'nuevo' || status === 'abierto') {
-        usedHours += baseHours; // Nuevo y Abierto consumen el 100%
-      } else if (status === 'en espera') {
-        usedHours += baseHours * 0.5; // En Espera libera el 50% de la carga
-      } else if (status === 'resuelto') {
-        // Usa tiempo invertido si existe (convertido a horas), sino asume 30 min por defecto
+      if (status === 'nuevo' || status === 'abierto' || status === 'progreso' || status === 'en_curso') {
+        usedHours += baseHours; 
+      } else if (status === 'en espera' || status === 'espera') {
+        usedHours += baseHours * 0.5; 
+      } else if (status === 'resuelto' || status === 'terminada') {
         usedHours += t.tiempo_invertido_minutos ? (t.tiempo_invertido_minutos / 60) : 0.5; 
       }
-      // Despriorizado y Fallido consumen 0 horas
     });
 
     const safeStart = startTime || '08:00';
@@ -446,7 +607,6 @@ export default function ConfigView2() {
     const [endH, endM] = safeEnd.split(':').map(Number);
     let availableHours = (endH + (endM || 0) / 60) - (startH + (startM || 0) / 60);
 
-    // Descontar Almuerzo si existe
     const almuerzoBlocks = bloques.filter(b => b.tipo === 'Almuerzo');
     almuerzoBlocks.forEach(b => {
       const [bStartH, bStartM] = b.hora_inicio.split(':').map(Number);
@@ -466,29 +626,141 @@ export default function ConfigView2() {
 
   const { usedHours, availableHours, remainingHours } = calculateTimeInfo();
 
+  const getCardBadgeInfo = (task: BacklogItem) => {
+    if (task.status === 'progreso') {
+      const todayStr = toLocalYYYYMMDD(new Date());
+      const isToday = task.scheduled_date === todayStr;
+      const dateLabel = isToday ? 'Hoy' : (task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : 'Plan');
+      
+      const exec = task.execution_status || 'agendado';
+      let statusKey = 'nuevo';
+      let label = `${dateLabel}: Agendado`;
+      
+      if (exec === 'progreso' || exec === 'en_curso') {
+        statusKey = 'nuevo';
+        label = `${dateLabel}: En Curso`;
+      } else if (exec === 'resuelto' || exec === 'terminada') {
+        statusKey = 'resuelto';
+        label = `${dateLabel}: Resuelto`;
+      } else if (exec === 'fallo' || exec === 'fallido' || exec === 'no realizado') {
+        statusKey = 'fallo';
+        label = `${dateLabel}: Fallo`;
+      } else {
+        statusKey = 'pendiente';
+        label = `${dateLabel}: Agendado`;
+      }
+      
+      const config = getStatusColor(statusKey);
+      return { label, classes: `${config.badge} ${config.badgeBorder}` };
+    }
+
+    const config = getStatusColor(task.status);
+    return { label: config.label, classes: `${config.badge} ${config.badgeBorder}` };
+  };
+
+  const getCardBgClass = (task: BacklogItem) => {
+    if (task.status === 'progreso') {
+      const exec = task.execution_status;
+      if (exec === 'progreso' || exec === 'en_curso') {
+        return 'bg-[#FFE017]/5 border-[#FFE017]/30 shadow-md ring-2 ring-[#FFE017]/20';
+      } else if (exec === 'resuelto' || exec === 'terminada') {
+        return 'bg-[#858585]/5 border-[#B8B8B8]/30 shadow-sm opacity-80';
+      } else if (exec === 'fallo' || exec === 'fallido' || exec === 'no realizado') {
+        return 'bg-[#B20F3B]/5 border-[#B20F3B]/30 shadow-md ring-2 ring-[#B20F3B]/20';
+      } else {
+        return 'bg-[#00D6CC]/5 border-[#00D6CC]/30 hover:shadow-md ring-2 ring-[#00D6CC]/10';
+      }
+    }
+    
+    const config = getStatusColor(task.status);
+    return `${config.cardBg} ${config.cardBorder} hover:shadow-md`;
+  };
+
+  const getTaskCode = (task: BacklogItem) => {
+    const prefix = task.rol_ejecutante === 'Calidad LATAM' ? 'L' : 'F';
+    const count = backlog.filter(b => b.rol_ejecutante === task.rol_ejecutante && b.id <= task.id).length;
+    return `${prefix}${String(count).padStart(3, '0')}`;
+  };
+
+  const isPlanningBlocked = selectedPlanningDate ? hasPastUnclosedDay(selectedPlanningDate) : false;
+
   return (
-    <div className="w-full px-2 py-2 space-y-4 bg-[#F8FAFC]">
+    <div className="w-full px-2 py-2 space-y-8 bg-[#F8FAFC]">
       
       {/* MODAL DE TAREA */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{editingTask?.id ? 'Editar Actividad' : 'Nueva Actividad'}</h3>
-                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors">✕</button>
+                <button onClick={() => { setIsModalOpen(false); setOriginalPriority(null); setJustificationText(''); }} className="text-slate-400 hover:text-red-500 transition-colors">✕</button>
               </div>
               <form onSubmit={handleSaveTask} className="p-6 space-y-5">
+                
+                {/* 1. Selector de Rol Ejecutante */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Descripción de la actividad</label>
-                  <textarea 
-                    value={editingTask?.actividad || ''} 
-                    onChange={e => setEditingTask({...editingTask, actividad: e.target.value})}
-                    placeholder="¿Qué hay que hacer?"
-                    className="w-full p-4 rounded-xl bg-slate-50 border border-slate-100 text-xs font-bold text-slate-700 outline-none focus:border-primary h-32 resize-none"
-                    required
-                  />
+                  <label className="text-[10px] font-black text-slate-400 uppercase">Rol que Ejecuta</label>
+                  <select 
+                    value={editingTask?.rol_ejecutante || 'Calidad Fabrica'} 
+                    onChange={e => {
+                      const newRole = e.target.value;
+                      setEditingTask({...editingTask, rol_ejecutante: newRole, actividad: ''});
+                    }}
+                    className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary"
+                  >
+                    <option value="Calidad Fabrica">Calidad Fábrica</option>
+                    <option value="Calidad LATAM">Calidad LATAM</option>
+                  </select>
                 </div>
+
+                {/* 2. Actividad (Predefinida o Libre) */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase">Actividad</label>
+                  <select 
+                    value={editingTask?.actividad || ''} 
+                    onChange={e => {
+                      const val = e.target.value;
+                      const role = editingTask?.rol_ejecutante || 'Calidad Fabrica';
+                      const template = MATRIZ_TAREAS[role]?.find(t => t.actividad === val);
+                      if (template) {
+                        setEditingTask({
+                          ...editingTask,
+                          actividad: val,
+                          complejidad: template.complejidad,
+                          tiempo_estimado: template.tiempo_estimado,
+                          area: template.area
+                        });
+                      } else {
+                        setEditingTask({
+                          ...editingTask,
+                          actividad: val,
+                          complejidad: 2,
+                          tiempo_estimado: 60
+                        });
+                      }
+                    }}
+                    className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary mb-2"
+                  >
+                    <option value="">-- Seleccionar Tarea del Catálogo --</option>
+                    {(MATRIZ_TAREAS[editingTask?.rol_ejecutante || 'Calidad Fabrica'] || []).map((t, i) => (
+                      <option key={i} value={t.actividad}>{t.actividad}</option>
+                    ))}
+                    <option value="Otro">Otra Actividad (Texto Libre)</option>
+                  </select>
+
+                  {editingTask?.actividad === 'Otro' || (editingTask?.actividad && !MATRIZ_TAREAS[editingTask?.rol_ejecutante || 'Calidad Fabrica']?.some(t => t.actividad === editingTask?.actividad)) ? (
+                    <textarea 
+                      value={editingTask?.actividad === 'Otro' ? '' : editingTask?.actividad} 
+                      onChange={e => setEditingTask({...editingTask, actividad: e.target.value})}
+                      placeholder="Escribe la descripción de la actividad..."
+                      className="w-full p-4 rounded-xl bg-slate-50 border border-slate-100 text-xs font-bold text-slate-700 outline-none focus:border-primary h-24 resize-none"
+                      required
+                    />
+                  ) : null}
+                </div>
+
+                {/* 3. Área e Información Técnica */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase">Área / Categoría</label>
@@ -505,22 +777,14 @@ export default function ConfigView2() {
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Estado Inicial</label>
-                    <select 
-                      value={editingTask?.status || 'pendiente'} 
-                      onChange={e => setEditingTask({...editingTask, status: e.target.value})}
-                      className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary"
-                    >
-                      <option value="nuevo">NUEVO</option>
-                      <option value="abierto">ABIERTO</option>
-                      <option value="pendiente">PENDIENTE</option>
-                      <option value="en espera">EN ESPERA</option>
-                      <option value="resuelto">RESUELTO</option>
-                      <option value="despriorizado">DESPRIORIZADO</option>
-                      <option value="fallo">FALLO</option>
-                    </select>
+                    <label className="text-[10px] font-black text-slate-400 uppercase">Complejidad</label>
+                    <div className="p-3 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 text-center">
+                      {editingTask?.complejidad === 1 ? '1 - BAJO' : editingTask?.complejidad === 2 ? '2 - MEDIO' : '3 - ALTO'}
+                    </div>
                   </div>
                 </div>
+
+                {/* 4. Prioridad */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase">Prioridad / Gravedad</label>
                   <div className="grid grid-cols-2 gap-2">
@@ -528,15 +792,78 @@ export default function ConfigView2() {
                       <button 
                         key={p.value} 
                         type="button"
-                        onClick={() => setEditingTask({...editingTask, prioridad: p.value})}
+                        onClick={() => {
+                          if (originalPriority === null && editingTask?.id) {
+                            setOriginalPriority(editingTask.prioridad || 4);
+                          }
+                          setEditingTask({...editingTask, prioridad: p.value});
+                        }}
                         className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex items-center gap-2 ${editingTask?.prioridad === p.value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
                       >
-                        <div className={`w-2 h-2 rounded-full ${p.color}`} />
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getPriorityColor(p.value).hex }} />
                         {p.label}
                       </button>
                     ))}
                   </div>
                 </div>
+
+                {/* 5. Justificación de Cambio de Prioridad (Sólo si cambia) */}
+                {editingTask?.id && originalPriority !== null && editingTask.prioridad !== originalPriority && (
+                  <div className="space-y-1.5 animate-in fade-in duration-300">
+                    <label className="text-[10px] font-black text-rose-500 uppercase ml-1">Justificación del Cambio (Requerida)</label>
+                    <textarea
+                      value={justificationText}
+                      onChange={e => setJustificationText(e.target.value)}
+                      placeholder="Explica brevemente por qué estás cambiando la prioridad original de esta tarea..."
+                      className="w-full p-3 rounded-xl bg-rose-50/20 border border-rose-200 text-xs font-bold text-slate-700 outline-none focus:border-rose-500 h-20 resize-none"
+                      required
+                    />
+                  </div>
+                )}
+
+                {/* 6. Asignaciones y Colaboración */}
+                <div className="space-y-3 pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-500 uppercase">Colaborativo / Grupo</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={editingTask?.is_collaborative || false}
+                        onChange={e => setEditingTask({...editingTask, is_collaborative: e.target.checked, assignedUsers: e.target.checked ? [Number(localStorage.getItem('atenea_user_id') || 1)] : []})}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-350 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
+                  </div>
+
+                  {editingTask?.is_collaborative && (
+                    <div className="space-y-2 max-h-32 overflow-y-auto p-3 bg-slate-50 rounded-xl border border-slate-100 custom-scrollbar">
+                      <p className="text-[8px] font-bold text-slate-400 uppercase mb-2">Seleccionar Compañeros de Equipo</p>
+                      {usersList.map((u: any) => (
+                        <label key={u.id} className="flex items-center gap-2 cursor-pointer py-1">
+                          <input 
+                            type="checkbox"
+                            checked={(editingTask.assignedUsers || []).includes(u.id)}
+                            onChange={e => {
+                              const checked = e.target.checked;
+                              const currentList = editingTask.assignedUsers || [];
+                              const newList = checked ? [...currentList, u.id] : currentList.filter(id => id !== u.id);
+                              setEditingTask({...editingTask, assignedUsers: newList});
+                            }}
+                            className="rounded text-primary focus:ring-primary border-slate-200"
+                          />
+                          <div className="flex-1 flex justify-between items-center text-[10px]">
+                            <span className="font-bold text-slate-700">{u.nombre}</span>
+                            {u.isLocked && (
+                              <span className="text-[7px] bg-red-150 text-red-600 px-1.5 py-0.5 rounded font-black border border-red-200/50 uppercase">Ocupado</span>
+                            )}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl">
                   {editingTask?.id ? 'Actualizar Tarea' : 'Añadir al Backlog'}
                 </button>
@@ -611,12 +938,12 @@ export default function ConfigView2() {
               </div>
               <div className="p-6 space-y-6">
                 <div className="flex bg-slate-100 p-1.5 rounded-xl gap-1">
-                  <button onClick={() => setNewBlock({...newBlock, isRecurrente: false})} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!newBlock.isRecurrente ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Única</button>
-                  <button onClick={() => setNewBlock({...newBlock, isRecurrente: true})} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${newBlock.isRecurrente ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Recurrente</button>
+                  <button onClick={() => { setIsExcepcionGroupMode(false); setNewBlock({...newBlock, isRecurrente: false}); }} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!isExcepcionGroupMode ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Día Único</button>
+                  <button onClick={() => { setIsExcepcionGroupMode(true); setNewBlock({...newBlock, isRecurrente: true}); }} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${isExcepcionGroupMode ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Recurrente</button>
                 </div>
                 
                 <div className="space-y-4">
-                  {newBlock.isRecurrente ? (
+                  {isExcepcionGroupMode ? (
                     <div className="flex justify-between gap-1.5">
                       {DIAS.map(d => (
                         <button key={d} onClick={() => setNewBlock(prev => ({...prev, dias: prev.dias.includes(d) ? prev.dias.filter(x => x !== d) : [...prev.dias, d]}))} className={`flex-1 h-9 rounded-xl text-[11px] font-black border transition-all ${newBlock.dias.includes(d) ? 'bg-primary text-white border-primary' : 'bg-slate-50 text-slate-400 border-slate-200 hover:border-primary/30'}`}>
@@ -685,44 +1012,66 @@ export default function ConfigView2() {
                     <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest opacity-80">Procesamiento inteligente de tareas</p>
                   </div>
                 </div>
-                <button onClick={() => setIsAiModalOpen(false)} className="absolute top-6 right-6 w-10 h-10 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-all text-white">
+                <button onClick={() => { setIsAiModalOpen(false); setAiSuggestions([]); }} className="absolute top-6 right-6 w-10 h-10 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-all text-white">
                   <X size={20} />
                 </button>
               </div>
               
-              <div className="p-10 space-y-8">
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Escribe tus actividades</label>
-                  <textarea 
-                    autoFocus
-                    value={freeText} 
-                    onChange={e => setFreeText(e.target.value)} 
-                    placeholder="Ej: Revisar correos de monitoreo a las 9am, luego capacitar al equipo en nuevas tendencias a las 11am..." 
-                    className="w-full h-48 p-6 rounded-[32px] bg-slate-50 border-2 border-slate-100 text-sm font-medium text-slate-700 placeholder:text-slate-300 resize-none outline-none focus:border-emerald-500/30 transition-all shadow-inner leading-relaxed"
-                  />
-                  <div className="flex items-center justify-between px-2">
-                    <button onClick={() => setFreeText('')} className="text-[10px] font-black text-slate-300 hover:text-red-500 uppercase tracking-widest transition-colors">
-                      Limpiar todo
-                    </button>
-                    <span className="text-[9px] font-bold text-slate-300 uppercase italic">La IA clasificará por prioridad y área automáticamente</span>
+              <div className="p-10 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                {aiSuggestions.length === 0 ? (
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Escribe tus actividades</label>
+                    <textarea 
+                      autoFocus
+                      value={freeText} 
+                      onChange={e => setFreeText(e.target.value)} 
+                      placeholder="Ej: Revisar indicadores radar, luego auditar BOTs por 3 horas..." 
+                      className="w-full h-48 p-6 rounded-[32px] bg-slate-50 border-2 border-slate-100 text-sm font-medium text-slate-700 placeholder:text-slate-300 resize-none outline-none focus:border-emerald-500/30 transition-all shadow-inner leading-relaxed"
+                    />
+                    <div className="flex items-center justify-between px-2">
+                      <button onClick={() => setFreeText('')} className="text-[10px] font-black text-slate-300 hover:text-red-500 uppercase tracking-widest transition-colors">
+                        Limpiar todo
+                      </button>
+                      <span className="text-[9px] font-bold text-slate-300 uppercase italic">La IA clasificará complejidad y prioridad automáticamente</span>
+                    </div>
+                    
+                    <div className="flex gap-4 pt-4">
+                      <button onClick={() => setIsAiModalOpen(false)} className="flex-1 py-5 rounded-[24px] text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
+                        Cancelar
+                      </button>
+                      <button 
+                        onClick={handleAiBacklog}
+                        disabled={isProcessing || !freeText.trim()}
+                        className="flex-[2] py-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[24px] text-[11px] font-black uppercase tracking-widest transition-all shadow-xl shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-3"
+                      >
+                        {isProcessing ? 'Procesando...' : <><Wand2 size={18} /> Analizar con IA</>}
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                <div className="flex gap-4 pt-4">
-                  <button onClick={() => setIsAiModalOpen(false)} className="flex-1 py-5 rounded-[24px] text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
-                    Cancelar
-                  </button>
-                  <button 
-                    onClick={async () => {
-                      await handleAiBacklog();
-                      setIsAiModalOpen(false);
-                    }}
-                    disabled={isProcessing || !freeText.trim()}
-                    className="flex-[2] py-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[24px] text-[11px] font-black uppercase tracking-widest transition-all shadow-xl shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-3"
-                  >
-                    {isProcessing ? 'Procesando...' : <><Wand2 size={18} /> Procesar con IA</>}
-                  </button>
-                </div>
+                ) : (
+                  <div className="space-y-6">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Actividades sugeridas por la IA:</p>
+                    <div className="space-y-3">
+                      {aiSuggestions.map((item, idx) => (
+                        <div key={idx} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col gap-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[8px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded uppercase">{item.rol_ejecutante}</span>
+                            <span className="text-[8px] font-black bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">Complejidad: {item.complejidad}</span>
+                          </div>
+                          <p className="text-xs font-bold text-slate-800">{item.actividad}</p>
+                          <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold uppercase mt-1">
+                            <span>Área: {item.area}</span>
+                            <span>Prioridad: {item.prioridad === 7 ? 'ALTA' : item.prioridad === 4 ? 'MEDIA' : 'BAJA'}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-4 pt-4">
+                      <button onClick={() => setAiSuggestions([])} className="flex-1 py-4 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all">Reintentar</button>
+                      <button onClick={handleSaveAiSuggestions} className="flex-[2] py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase transition-all shadow-lg shadow-emerald-600/20">Agregar todo al Backlog</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>
@@ -750,28 +1099,40 @@ export default function ConfigView2() {
               </div>
 
               <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-                {/* Sugerencia de Inicio (Global para el modal) */}
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="px-6 py-4 bg-[#7DA81A]/5 border-b border-[#7DA81A]/10 flex items-start gap-4"
-                >
-                  <div className="p-2 bg-[#7DA81A]/10 rounded-lg text-[#7DA81A] animate-pulse">
-                    <span className="text-sm">⚡</span>
+                {/* Banner de Bloqueo por Jornadas Pasadas Abiertas */}
+                {isPlanningBlocked && (
+                  <div className="bg-red-500 text-white px-6 py-4 flex items-center gap-3 animate-pulse shadow-md z-20">
+                    <AlertTriangle size={20} className="shrink-0" />
+                    <span className="text-xs font-black uppercase tracking-wide leading-relaxed">
+                      🔒 Planificación Bloqueada: Tienes días de turnos pasados sin finalizar. Debes ingresar a la agenda correspondiente en el menú lateral y presionar "Finalizar Turno" antes de planificar nuevas actividades.
+                    </span>
                   </div>
-                  <div>
-                    <h4 className="text-[10px] font-black text-[#7DA81A] uppercase tracking-wider mb-0.5 flex items-center gap-2">
-                      <span>🧠</span> Sugerencia de Inicio del Día
-                    </h4>
-                    <p className="text-[11px] text-slate-700 font-bold leading-relaxed">
-                      {dayStartSuggestion}
-                    </p>
-                  </div>
-                </motion.div>
+                )}
+
+                {/* Sugerencia de Inicio (Oculta si está bloqueado) */}
+                {!isPlanningBlocked && pendingSuggestions.length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="px-6 py-4 bg-[#7DA81A]/5 border-b border-[#7DA81A]/10 flex items-start gap-4"
+                  >
+                    <div className="p-2 bg-[#7DA81A]/10 rounded-lg text-[#7DA81A] animate-pulse">
+                      <span className="text-sm">⚡</span>
+                    </div>
+                    <div>
+                      <h4 className="text-[10px] font-black text-[#7DA81A] uppercase tracking-wider mb-0.5 flex items-center gap-2">
+                        <span>🧠</span> Sugerencia de Inicio del Día
+                      </h4>
+                      <p className="text-[11px] text-slate-700 font-bold leading-relaxed">
+                        {dayStartSuggestion}
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
 
                 <div className="flex-1 flex overflow-hidden">
-                {/* 1. Panel Izquierdo: Backlog Disponible */}
-                <div className="w-1/3 flex flex-col border-r border-slate-200 bg-white">
+                {/* 1. Panel Izquierdo: Backlog Disponible (Oculto/Borrado si está bloqueado) */}
+                <div className={`w-1/3 flex flex-col border-r border-slate-200 bg-white transition-opacity ${isPlanningBlocked ? 'opacity-30 pointer-events-none' : ''}`}>
                    <div className="p-5 border-b border-slate-100">
                      <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
                         <Database size={14} className="text-primary" />
@@ -780,34 +1141,37 @@ export default function ConfigView2() {
                      <p className="text-[9px] font-bold text-slate-400 mt-1">Actividades esperando ser programadas.</p>
                    </div>
                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
-                     {backlog.filter(t => !dayTasks.some(dt => dt.backlog_id === t.id)).map(task => (
-                       <div key={task.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-primary/30 transition-all group flex flex-col gap-2 relative overflow-hidden">
-                         <div className="flex items-center justify-between">
-                            <span className="text-[7px] font-black bg-white text-slate-400 px-2 py-0.5 rounded-md uppercase border border-slate-100">{task.area || 'Gral'}</span>
-                            {(() => {
-                              const prio = PRIORITIES.find(p => p.value === task.prioridad) || PRIORITIES[3];
-                              return (
-                                <span className={`text-[7px] font-black px-2 py-0.5 rounded-full uppercase text-white shadow-sm ${prio.color}`}>
-                                  {prio.label}
-                                </span>
-                              );
-                            })()}
-                         </div>
-                         <p className="text-[10px] font-bold text-slate-700 leading-snug pr-4">{task.actividad}</p>
-                         
-                         {/* Hover Layer to Add */}
-                         <div className="absolute inset-0 bg-primary/95 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                           <button 
-                             onClick={() => handleAssignToDayFromModal(task)}
-                             className="px-6 py-2 bg-white text-primary rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:scale-105 transition-transform flex items-center gap-2"
-                           >
-                             <Plus size={14} /> Añadir al Día
-                           </button>
-                         </div>
-                       </div>
-                     ))}
-                     {backlog.filter(t => !dayTasks.some(dt => dt.backlog_id === t.id)).length === 0 && (
-                       <div className="text-center p-6 text-[10px] font-bold text-slate-400">No hay tareas disponibles en el backlog.</div>
+                     {backlog
+                       .filter(t => !['resuelto', 'terminada', 'despriorizado', 'fallo', 'fallido'].includes(t.status))
+                       .filter(t => !dayTasks.some(dt => dt.backlog_id === t.id))
+                       .map(task => (
+                        <div key={task.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-primary/30 transition-all group flex flex-col gap-2 relative overflow-hidden">
+                          <div className="flex items-center justify-between">
+                             <span className="text-[7px] font-black bg-white text-slate-400 px-2 py-0.5 rounded-md uppercase border border-slate-100">{task.area || 'Gral'}</span>
+                              {(() => {
+                                const prio = getPriorityColor(task.prioridad);
+                                return (
+                                  <span className={`text-[7px] font-black px-2 py-0.5 rounded-full uppercase shadow-sm ${prio.badge}`}>
+                                    {prio.label}
+                                  </span>
+                                );
+                              })()}
+                          </div>
+                          <p className="text-[10px] font-bold text-slate-700 leading-snug pr-4">{task.actividad}</p>
+                          
+                          {/* Hover Layer to Add */}
+                          <div className="absolute inset-0 bg-primary/95 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                            <button 
+                              onClick={() => handleAssignToDayFromModal(task)}
+                              className="px-6 py-2 bg-white text-primary rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:scale-105 transition-transform flex items-center gap-2"
+                            >
+                              <Plus size={14} /> Añadir al Día
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                     {backlog.filter(t => !['resuelto', 'terminada', 'despriorizado', 'fallo', 'fallido'].includes(t.status)).filter(t => !dayTasks.some(dt => dt.backlog_id === t.id)).length === 0 && (
+                       <div className="text-center p-6 text-[10px] font-bold text-slate-400">No hay tareas activas en el backlog.</div>
                      )}
                    </div>
                 </div>
@@ -819,7 +1183,7 @@ export default function ConfigView2() {
                       <ListChecks size={16} className="text-primary" />
                       Tareas de {selectedPlanningDate} ({dayTasks.length})
                     </h4>
-                    {dayTasks.length > 0 && (
+                    {dayTasks.length > 0 && !isPlanningBlocked && (
                       <button 
                         onClick={handleClearAllTasks}
                         className="text-[9px] font-black text-slate-400 hover:text-red-500 uppercase tracking-widest transition-colors flex items-center gap-1"
@@ -830,7 +1194,7 @@ export default function ConfigView2() {
                   </div>
 
                   {/* Tareas Pendientes del Día Anterior */}
-                  {pendingSuggestions.length > 0 && (
+                  {!isPlanningBlocked && pendingSuggestions.length > 0 && (
                     <div className="mb-6 bg-primary/5 border border-primary/20 rounded-2xl p-4">
                       <div className="flex items-center gap-2 mb-4 text-primary">
                         <span className="text-sm">🚀</span>
@@ -842,9 +1206,9 @@ export default function ConfigView2() {
                             <div className="flex items-start gap-4">
                               <div className="flex flex-col gap-2 pt-1">
                                 {(() => {
-                                  const prio = PRIORITIES.find(p => p.value === t.prioridad) || PRIORITIES[3];
+                                  const prio = getPriorityColor(t.prioridad);
                                   return (
-                                    <span className={`text-[7px] font-black px-2.5 py-1 rounded-full uppercase text-white text-center tracking-widest shadow-sm ${prio.color}`}>
+                                    <span className={`text-[7px] font-black px-2.5 py-1 rounded-full uppercase text-center tracking-widest shadow-sm ${prio.badge}`}>
                                       {prio.label}
                                     </span>
                                   );
@@ -888,9 +1252,9 @@ export default function ConfigView2() {
                             <div className="flex flex-col gap-1.5">
                               <span className="text-[7px] font-black text-slate-300 bg-slate-50 px-2 py-0.5 rounded-md uppercase border border-slate-100 w-fit">{t.area || 'Gral'}</span>
                               {(() => {
-                                const prio = PRIORITIES.find(p => p.value === t.prioridad) || PRIORITIES[3];
+                                const prio = getPriorityColor(t.prioridad);
                                 return (
-                                  <span className={`text-[7px] font-black px-2 py-0.5 rounded-full uppercase text-white shadow-sm ${prio.color} w-fit`}>
+                                  <span className={`text-[7px] font-black px-2 py-0.5 rounded-full uppercase shadow-sm ${prio.badge} w-fit`}>
                                     {prio.label}
                                   </span>
                                 );
@@ -898,13 +1262,16 @@ export default function ConfigView2() {
                             </div>
                             <span className="text-[11px] font-bold text-slate-700">{t.actividad}</span>
                           </div>
-                          <button onClick={async () => {
-                            await fetch(`/api/tareas/${t.id}`, { method: 'DELETE' });
-                            setDayTasks(prev => prev.filter(x => x.id !== t.id));
-                            fetchBacklog();
-                          }} className="text-slate-200 hover:text-red-500 transition-colors p-2 opacity-0 group-hover:opacity-100">
-                            <Trash2 size={16} />
-                          </button>
+                          {!isPlanningBlocked && (
+                            <button onClick={async () => {
+                              await fetch(`/api/tareas/${t.id}`, { method: 'DELETE' });
+                              setDayTasks(prev => prev.filter(x => x.id !== t.id));
+                              fetchBacklog();
+                            }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all p-2"
+                            title="Eliminar tarea asignada">
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -917,7 +1284,7 @@ export default function ConfigView2() {
                   )}
                 </div>
 
-                {/* 3. Panel Derecho: IA y Resumen de Tiempo */}
+                {/* 3. Panel Derecho: Resumen de Tiempo */}
                 <div className="w-[320px] bg-white border-l border-slate-100 flex flex-col overflow-y-auto custom-scrollbar">
                   {/* Resumen de Tiempo */}
                   <div className="p-6 border-b border-slate-100 bg-slate-50/50">
@@ -932,13 +1299,13 @@ export default function ConfigView2() {
                         <span className="text-[11px] font-black text-slate-800">{endTime}</span>
                       </div>
                       
-                        <div className="bg-primary/5 border border-primary/10 rounded-2xl p-5 flex flex-col items-center text-center mt-2 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 p-2 opacity-5">
-                            <Clock size={40} className="text-primary" />
-                          </div>
-                          <span className="text-[10px] font-black text-primary uppercase tracking-widest mb-1 relative z-10">Jornada Efectiva</span>
-                          <span className="text-2xl font-black text-primary relative z-10">{availableHours.toFixed(1)}h</span>
+                      <div className="bg-primary/5 border border-primary/10 rounded-2xl p-5 flex flex-col items-center text-center mt-2 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-2 opacity-5">
+                          <Clock size={40} className="text-primary" />
                         </div>
+                        <span className="text-[10px] font-black text-primary uppercase tracking-widest mb-1 relative z-10">Jornada Efectiva</span>
+                        <span className="text-2xl font-black text-primary relative z-10">100% Capacidad</span>
+                      </div>
                     </div>
                   </div>
 
@@ -965,10 +1332,7 @@ export default function ConfigView2() {
                           <AlertTriangle size={14} /> Capacidad Alcanzada
                         </h5>
                         <p className="text-[9px] font-bold text-orange-600/90 leading-relaxed">
-                          La planificación actual supera el tiempo disponible. Atenea no puede construir una agenda realista con esta carga.
-                        </p>
-                        <p className="text-[9px] font-bold text-orange-600/90 leading-relaxed mt-2">
-                          Puedes ajustar la cantidad de actividades o redefinir prioridades para continuar.
+                          La planificación actual supera el tiempo disponible.
                         </p>
                       </div>
                     ) : (
@@ -979,19 +1343,17 @@ export default function ConfigView2() {
                         <p className="text-[9px] font-bold text-emerald-600/90 leading-relaxed">
                           Las actividades seleccionadas encajan perfectamente en tu jornada.
                         </p>
-                        <p className="text-[9px] font-bold text-emerald-600/90 leading-relaxed mt-2">
-                          La agenda del día está lista para ser ejecutada.
-                        </p>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-            </div>
+              </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
       <>
       {/* 1. CALENDARIO SEMANAL L-V Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
@@ -1043,6 +1405,7 @@ export default function ConfigView2() {
 
           <button 
             onClick={() => {
+              setIsExcepcionGroupMode(true);
               setIsExcepcionModalOpen(true);
             }}
             className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-lg flex items-center gap-2"
@@ -1052,27 +1415,26 @@ export default function ConfigView2() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-
-
           {weekDates.map((date, index) => {
             const diaNombre = DIAS[index];
-            const dateStr = date.toISOString().split('T')[0];
+            const dateStr = toLocalYYYYMMDD(date);
             const dayBlocks = bloques.filter(b => b.dia_semana === diaNombre || b.fecha === dateStr);
-            const isToday = new Date().toISOString().split('T')[0] === dateStr;
-            const isFuture = dateStr > new Date().toISOString().split('T')[0];
+            const isToday = toLocalYYYYMMDD(new Date()) === dateStr;
+            const isFuture = dateStr > toLocalYYYYMMDD(new Date());
+            const isClosed = dailyPlans[dateStr]?.estado_cierre === 1;
 
             return (
               <div 
                 key={diaNombre} 
                 id={`day-col-${dateStr}`}
-                onDragOver={e => !isFuture && e.preventDefault()}
-                onDrop={e => !isFuture && handleDropToDay(e, dateStr)}
+                onDragOver={e => isToday && e.preventDefault()}
+                onDrop={e => isToday && handleDropToDay(e, dateStr)}
                 onClick={() => {
                   if (isFuture) return;
                   setSelectedPlanningDate(dateStr); 
                   setIsPlanningModalOpen(true); 
                 }}
-                className={`flex flex-col rounded-2xl border overflow-hidden transition-all relative group ${isFuture ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-md'} ${isToday ? 'bg-primary/5 border-primary/20 shadow-md ring-1 ring-primary/10' : 'bg-slate-50/50 border-slate-100'}`}
+                className={`flex flex-col rounded-2xl border overflow-hidden transition-all relative group ${isFuture ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-md'} ${isToday ? 'border-primary ring-2 ring-primary/20 shadow-lg scale-[1.02] z-10 bg-white' : 'border-slate-100 bg-slate-50/50'}`}
               >
                 {isFuture && (
                   <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-end pb-4 bg-slate-50/10">
@@ -1082,15 +1444,19 @@ export default function ConfigView2() {
                      </div>
                   </div>
                 )}
-                <div className={`p-3 transition-colors text-center ${isToday ? 'bg-primary text-white' : 'bg-primary group-hover:bg-primary-soft text-white'}`}>
+                <div 
+                  className="p-3 text-center text-white transition-opacity group-hover:opacity-90"
+                  style={{ backgroundColor: isToday ? '#1b0088' : '#0f004f' }}
+                >
                   <h4 className="text-[10px] font-black uppercase tracking-widest">{diaNombre}</h4>
-                  <p className={`text-[9px] font-bold mt-0.5 ${isToday ? 'text-white/80' : 'text-white/60'}`}>{date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}</p>
+                  <p className="text-[9px] font-bold mt-0.5 text-white/80">{date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}</p>
                 </div>
                 
                 <div className="p-4 space-y-5">
                    <div 
                      onClick={(e) => {
                        e.stopPropagation();
+                       if (isClosed) return; // closed days are read-only
                        setStartDate(dateStr);
                        setEndDate(dateStr);
                        const plan = dailyPlans[dateStr];
@@ -1098,22 +1464,24 @@ export default function ConfigView2() {
                        setEndTime(plan?.hora_fin || '17:00');
                        setIsJornadaModalOpen(true);
                      }}
-                     className={`relative pl-3 border-l-2 hover:bg-primary/5 transition-all rounded-r-lg p-2 cursor-pointer group/jornada ${isToday ? 'border-primary bg-primary/5' : 'border-primary/20'}`}
+                     className={`relative pl-3 border-l-2 p-2 ${isClosed ? 'border-slate-200 cursor-default' : 'border-primary/20 hover:bg-primary/5 cursor-pointer group/jornada'}`}
                    >
                      <div className="flex items-center justify-between">
                        <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Jornada Base</span>
-                       <div className="opacity-0 group-hover/jornada:opacity-100 transition-opacity">
-                         <Save size={8} className="text-primary" />
-                       </div>
+                       {!isClosed && (
+                         <div className="opacity-0 group-hover/jornada:opacity-100 transition-opacity">
+                           <Save size={8} className="text-primary" />
+                         </div>
+                       )}
                      </div>
                      <div className="flex items-center gap-2 mt-1">
-                       <Clock size={10} className={isToday ? 'text-primary' : 'text-primary/60'} />
+                       <Clock size={10} className="text-primary/60" />
                        <span className="text-[10px] font-black text-slate-700">
                          {dailyPlans[dateStr]?.hora_inicio || '08:00'} - {dailyPlans[dateStr]?.hora_fin || '17:00'}
                        </span>
                      </div>
                    </div>
-
+ 
                    {/* Excepciones */}
                    <div className="space-y-3 pt-2 border-t border-slate-50">
                      <div className="flex items-center justify-between">
@@ -1121,18 +1489,29 @@ export default function ConfigView2() {
                          <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Excepciones</span>
                          <span className="text-[7px] font-black text-primary/30 px-1.5 py-0.5 bg-slate-50 rounded-md">{dayBlocks.length}</span>
                        </div>
-                       <button 
-                         onClick={(e) => {
-                           e.stopPropagation();
-                           setNewBlock(prev => ({ ...prev, fecha: dateStr, isRecurrente: false }));
-                           setIsExcepcionModalOpen(true);
-                         }}
-                         className="p-1 hover:bg-accent/10 rounded-md text-accent transition-all group/add"
-                       >
-                         <Plus size={10} className="group-hover/add:scale-125 transition-transform" />
-                       </button>
+                       {!isClosed && (
+                         <button 
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setNewBlock({
+                               isRecurrente: false,
+                               dias: [],
+                               fecha: dateStr,
+                               inicio: '13:00',
+                               fin: '14:00',
+                               tipo: 'Almuerzo',
+                               motivo: ''
+                             });
+                             setIsExcepcionGroupMode(false);
+                             setIsExcepcionModalOpen(true);
+                           }}
+                           className="p-1 hover:bg-accent/10 rounded-md text-accent transition-all group/add"
+                         >
+                           <Plus size={10} className="group-hover/add:scale-125 transition-transform" />
+                         </button>
+                       )}
                      </div>
-
+ 
                      <div className="space-y-2">
                        {dayBlocks.length > 0 ? (
                          dayBlocks.map(b => (
@@ -1142,12 +1521,15 @@ export default function ConfigView2() {
                                  <div className="w-1.5 h-1.5 rounded-full bg-accent" />
                                  <span className="text-[8px] font-black text-slate-700 uppercase">{b.tipo}</span>
                                </div>
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); deleteBloque(b.id); }} 
-                                 className="opacity-0 group-hover/item:opacity-100 text-slate-300 hover:text-red-500 transition-all p-1"
-                               >
-                                 <Trash2 size={10} />
-                               </button>
+                               {!isClosed && (
+                                 <button 
+                                   onClick={(e) => { e.stopPropagation(); deleteBloque(b.id); }} 
+                                   className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded-md transition-all"
+                                   title="Eliminar excepción"
+                                 >
+                                   <Trash2 size={10} />
+                                 </button>
+                               )}
                              </div>
                              <div className="flex items-center gap-1.5">
                                <Clock size={9} className="text-slate-400" />
@@ -1180,26 +1562,45 @@ export default function ConfigView2() {
               <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Gestión de flujo de trabajo operativo</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          
+          {/* Split Button para Crear Tarea e IA */}
+          <div className="relative flex items-center bg-primary rounded-xl shadow-lg shadow-primary/20">
             <button 
-              onClick={() => setIsAiModalOpen(true)}
-              className="px-5 py-2.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl hover:bg-emerald-600 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-sm"
-            >
-              <Wand2 size={14} /> IA Asistente
-            </button>
-            <button 
-              onClick={() => { setEditingTask({ prioridad: 10 }); setIsModalOpen(true); }}
-              className="px-6 py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-soft transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
+              onClick={() => { setEditingTask({ prioridad: 4 }); setOriginalPriority(null); setJustificationText(''); setIsModalOpen(true); }}
+              className="px-5 py-3 text-white text-[10px] font-black uppercase tracking-widest hover:bg-primary-soft transition-all rounded-l-xl flex items-center gap-2 border-r border-white/20"
             >
               <Plus size={14} /> Nueva Tarea
             </button>
+            <button 
+              onClick={() => setIsButtonDropdownOpen(!isButtonDropdownOpen)}
+              className="p-3 text-white hover:bg-primary-soft transition-all rounded-r-xl"
+            >
+              <ChevronDown size={14} />
+            </button>
+
+            {isButtonDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                <button 
+                  onClick={() => { setIsButtonDropdownOpen(false); setEditingTask({ prioridad: 4 }); setOriginalPriority(null); setJustificationText(''); setIsModalOpen(true); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-[10px] font-bold text-slate-700 uppercase flex items-center gap-2"
+                >
+                  <Plus size={12} className="text-slate-400" /> Crear Manual
+                </button>
+                <button 
+                  onClick={() => { setIsButtonDropdownOpen(false); setIsAiModalOpen(true); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-[10px] font-bold text-slate-700 uppercase flex items-center gap-2"
+                >
+                  <Wand2 size={12} className="text-emerald-500" /> Asistente IA
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Tablero Kanban en Formato de 4 Columnas Verticales con Scroll Independiente */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1 min-h-[580px] overflow-hidden pb-4">
           {PRIORITIES.map(priority => {
-            const tasks = backlog.filter(t => t.prioridad === priority.value);
+            const tasks = backlog.filter(t => t.prioridad === priority.value && !['resuelto', 'terminada', 'despriorizado', 'fallo', 'fallido'].includes(t.status));
             return (
               <div 
                 key={priority.value} 
@@ -1210,7 +1611,7 @@ export default function ConfigView2() {
                 {/* Cabecera Superior de la Columna */}
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-white shadow-sm border border-slate-100">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${priority.color}`} />
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getPriorityColor(priority.value).hex }} />
                     <span className="text-[10px] font-black text-slate-800 tracking-wider">{priority.label}</span>
                   </div>
                   <span className="text-[9px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
@@ -1221,68 +1622,45 @@ export default function ConfigView2() {
                 {/* Contenedor de Tareas Vertical con Scrollbar */}
                 <div className="flex-1 flex flex-col gap-3 overflow-y-auto pr-1 custom-scrollbar pb-4">
                   {tasks.length > 0 ? (
-                    tasks.map(task => (
-                      <div 
-                        key={task.id} 
-                        draggable
-                        onDragStart={e => handleDragStart(e, task.id)}
-                        onClick={() => { setEditingTask(task); setIsModalOpen(true); }}
-                        className={`w-full p-4 rounded-2xl border shadow-sm transition-all group/card relative cursor-pointer active:scale-95 flex flex-col gap-2 ${
-                          task.status === 'nuevo'
-                            ? 'bg-amber-50 border-amber-200 shadow-md ring-2 ring-amber-500/20'
-                          : task.status === 'abierto' 
-                            ? 'bg-red-50 border-red-200 shadow-md ring-2 ring-red-500/20' 
-                          : task.status === 'pendiente' 
-                            ? 'bg-sky-50 border-sky-200 hover:shadow-md hover:border-sky-500/30' 
-                          : task.status === 'en espera'
-                            ? 'bg-slate-50 border-slate-200 text-slate-700 shadow-sm'
-                          : task.status === 'resuelto'
-                            ? 'bg-slate-100 border-slate-200 opacity-80'
-                          : task.status === 'fallo' || task.status === 'fallido'
-                            ? 'bg-rose-50 border-rose-200 shadow-md ring-2 ring-rose-500/20'
-                          : 'bg-white border-slate-200 hover:shadow-md hover:border-primary/30'
-                        }`}
-                      >
-                         <div className="flex items-center justify-between">
-                            <span className="text-[7px] font-black text-slate-300 uppercase tracking-widest">#{task.id}</span>
+                    tasks.map(task => {
+                      const badge = getCardBadgeInfo(task);
+                      const bgClass = getCardBgClass(task);
+                      return (
+                        <div 
+                          key={task.id} 
+                          draggable
+                          onDragStart={e => handleDragStart(e, task.id)}
+                          onClick={() => { setEditingTask(task); setOriginalPriority(task.prioridad); setJustificationText(''); setIsModalOpen(true); }}
+                          className={`w-full p-4 rounded-2xl border shadow-sm transition-all group/card relative cursor-pointer active:scale-95 flex flex-col gap-2 ${bgClass}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">#{getTaskCode(task)}</span>
                             <div className="flex gap-1.5">
-                              <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase border ${
-                                task.status === 'nuevo' ? 'bg-amber-500 text-white border-amber-600' :
-                                task.status === 'abierto' ? 'bg-red-600 text-white border-red-700' :
-                                task.status === 'pendiente' ? 'bg-sky-500 text-white border-sky-600' :
-                                task.status === 'en espera' ? 'bg-slate-900 text-white border-slate-900' :
-                                task.status === 'resuelto' ? 'bg-slate-500 text-white border-slate-600' :
-                                task.status === 'despriorizado' ? 'bg-slate-400 text-white border-slate-500' :
-                                'bg-rose-700 text-white border-rose-800'
-                              }`}>
-                                {task.status === 'nuevo' ? 'NUEVO' :
-                                 task.status === 'abierto' ? 'ABIERTO' :
-                                 task.status === 'pendiente' ? 'PENDIENTE' :
-                                 task.status === 'en espera' ? 'EN ESPERA' :
-                                 task.status === 'resuelto' ? 'RESUELTO' :
-                                 task.status === 'despriorizado' ? 'DESPRIORIZADO' : 'FALLO'}
+                              <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase border ${badge.classes}`}>
+                                {badge.label}
                               </span>
-                              <span className="text-[7px] font-black bg-slate-50 text-slate-400 px-2 py-0.5 rounded-md uppercase">{task.area || 'Gral'}</span>
+                              <span className="text-[8px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded uppercase border border-slate-100">{task.rol_ejecutante || 'Calidad Fabrica'}</span>
                             </div>
-                            {task.created_at && (
-                              <div className={`text-[8px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                                Math.floor((new Date().getTime() - new Date(task.created_at).getTime()) / (1000 * 60 * 60 * 24)) > 2 
-                                  ? 'text-red-500 bg-red-50' 
-                                  : 'text-slate-400 bg-slate-50'
-                              }`}>
-                                <Clock size={10} /> {Math.floor((new Date().getTime() - new Date(task.created_at).getTime()) / (1000 * 60 * 60 * 24))}d
-                              </div>
-                            )}
                           </div>
-                         <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight leading-snug">{task.actividad}</p>
-                         <div className="flex justify-between items-end mt-auto pt-2 border-t border-slate-50">
+                          <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight leading-snug">{task.actividad}</p>
+                          
+                          {task.is_collaborative && (
+                            <div className="flex items-center gap-1.5 py-1 px-2 bg-slate-100/50 rounded-lg w-fit">
+                              <Users size={10} className="text-slate-400" />
+                              <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Colaborativa</span>
+                            </div>
+                          )}
+
+                          <div className="flex justify-between items-end mt-auto pt-2 border-t border-slate-50">
                             <span className="text-[8px] font-bold text-slate-400">{task.created_at ? new Date(task.created_at).toLocaleDateString() : 'N/A'}</span>
-                            <button onClick={(e) => { e.stopPropagation(); deleteBacklog(task.id); }} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover/card:opacity-100">
+                            <button onClick={(e) => { e.stopPropagation(); deleteBacklog(task.id); }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all p-1"
+                            title="Eliminar tarea del backlog">
                               <Trash2 size={12} />
                             </button>
-                         </div>
-                      </div>
-                    ))
+                          </div>
+                        </div>
+                      );
+                    })
                   ) : (
                     <div className="w-full flex flex-col items-center justify-center opacity-40 py-12 border-2 border-dashed border-slate-200 rounded-2xl">
                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Sin tareas en esta prioridad</span>
@@ -1293,6 +1671,164 @@ export default function ConfigView2() {
             );
           })}
         </div>
+      </div>
+
+      {/* ARCHIVO DE BACKLOG */}
+      <div className="latam-card !p-8 bg-white border border-slate-200 shadow-xl rounded-[40px] mt-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shadow-inner">
+              <Archive size={20} />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Archivo de Backlog</h4>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Historial de tareas finalizadas</p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <input 
+              type="text" 
+              placeholder="Buscar en archivo..." 
+              value={archiveSearch}
+              onChange={e => { setArchiveSearch(e.target.value); setArchivePage(1); }}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:border-slate-400"
+            />
+            <select 
+              value={archiveTimeFilter}
+              onChange={e => { setArchiveTimeFilter(e.target.value); setArchivePage(1); }}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none"
+            >
+              <option value="all">Todo el Historial</option>
+              <option value="7">Últimos 7 días</option>
+              <option value="30">Últimos 30 días</option>
+            </select>
+            <button 
+              onClick={handlePurgeClosedBacklog}
+              className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm flex items-center gap-2"
+            >
+              <Trash2 size={14} /> Purgar Archivo
+            </button>
+          </div>
+        </div>
+
+        {(() => {
+          const archivedTasks = backlog.filter(t => {
+            const isCompleted = ['resuelto', 'terminada', 'despriorizado', 'fallo', 'fallido'].includes(t.status);
+            if (!isCompleted) return false;
+
+            if (archiveSearch.trim()) {
+              const query = archiveSearch.toLowerCase();
+              const activityMatch = t.actividad.toLowerCase().includes(query);
+              const areaMatch = t.area ? t.area.toLowerCase().includes(query) : false;
+              if (!activityMatch && !areaMatch) return false;
+            }
+
+            if (archiveTimeFilter !== 'all') {
+              const daysLimit = Number(archiveTimeFilter);
+              const createdDate = t.created_at ? new Date(t.created_at) : new Date();
+              const diffTime = Math.abs(new Date().getTime() - createdDate.getTime());
+              const diffDays = diffTime / (1000 * 60 * 60 * 24);
+              if (diffDays > daysLimit) return false;
+            }
+
+            return true;
+          });
+
+          const totalPages = Math.ceil(archivedTasks.length / archiveItemsPerPage);
+          const paginatedTasks = archivedTasks.slice((archivePage - 1) * archiveItemsPerPage, archivePage * archiveItemsPerPage);
+
+          return (
+            <div className="space-y-4">
+              {paginatedTasks.length > 0 ? (
+                <div className="space-y-3">
+                  {paginatedTasks.map(task => {
+                    return (
+                      <div 
+                        key={task.id} 
+                        className="bg-slate-50/50 hover:bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all"
+                      >
+                        <div className="flex items-start sm:items-center gap-4 flex-1">
+                          <div className="flex flex-col gap-1.5 min-w-[100px]">
+                            <span className={`text-[7px] font-black px-2 py-1 rounded-md uppercase text-center border ${getStatusColor(task.status).badge} ${getStatusColor(task.status).badgeBorder}`}>
+                              {getStatusColor(task.status).label}
+                            </span>
+                            <span className={`text-[7px] font-black px-2 py-0.5 rounded-full uppercase text-center ${getPriorityColor(task.prioridad).badge}`}>
+                              {getPriorityColor(task.prioridad).label}
+                            </span>
+                          </div>
+
+                          <div className="flex-1">
+                            <h5 className="text-[11px] font-bold text-slate-800 leading-snug">{task.actividad}</h5>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="text-[8px] font-bold bg-white text-slate-400 px-2 py-0.5 rounded border border-slate-100 uppercase">{task.area || 'Gral'}</span>
+                              <span className="text-[8px] text-slate-400">ID: #{getTaskCode(task)}</span>
+                              <span className="text-[8px] text-slate-400">•</span>
+                              <span className="text-[8px] text-slate-400">Creado: {task.created_at ? new Date(task.created_at).toLocaleDateString() : 'N/A'}</span>
+                              {task.justificacion && (
+                                <>
+                                  <span className="text-[8px] text-slate-400">•</span>
+                                  <span className="text-[8px] text-rose-500 font-medium">Justificación: {task.justificacion}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Botones de acción */}
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => handleRestoreBacklog(task.id)}
+                            className="px-4 py-2 border border-slate-200 hover:border-primary/30 hover:bg-primary/5 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
+                            title="Restaurar al backlog activo"
+                          >
+                            <ArrowRight size={12} className="rotate-180" /> Restaurar
+                          </button>
+                          <button 
+                            onClick={() => deleteBacklog(task.id)}
+                            className="p-2 border border-slate-200 hover:border-red-500 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl transition-all"
+                            title="Eliminar permanentemente"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 border-2 border-dashed border-slate-100 rounded-2xl flex flex-col items-center justify-center gap-2 opacity-50">
+                  <Archive size={24} className="text-slate-400" />
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Sin actividades archivadas</p>
+                </div>
+              )}
+
+              {/* Paginación */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400">
+                    Página {archivePage} de {totalPages} ({archivedTasks.length} tareas en total)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setArchivePage(prev => Math.max(prev - 1, 1))}
+                      disabled={archivePage === 1}
+                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-[10px] font-black uppercase transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      onClick={() => setArchivePage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={archivePage === totalPages}
+                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-[10px] font-black uppercase transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
       </>
     </div>

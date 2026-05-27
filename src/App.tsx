@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo, BrainCircuit } from 'lucide-react';
+import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo, BrainCircuit, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import HomeView from './components/HomeView';
 import ConfigView2 from './components/ConfigView2';
@@ -12,22 +12,44 @@ import FocusView from './components/FocusView';
 import AgendaView2 from './components/AgendaView2';
 import DashboardView2 from './components/DashboardView2';
 import HistoryView2 from './components/HistoryView2';
+import ProductivityView from './components/ProductivityView';
+import TimeReportView from './components/TimeReportView';
+import RulesView from './components/RulesView';
 import logoLatam from './assets/logo_latam.png';
 
-type View = 'home' | 'config2' | 'agenda2' | 'agenda_pro' | 'dashboard2' | 'history2';
+type View = 'home' | 'config2' | 'agenda2' | 'agenda_pro' | 'dashboard2' | 'history2' | 'productivity' | 'planilla' | 'rules';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [user, setUser] = useState({ name: 'Cargando...', email: '', initials: '...' });
+  const [user, setUser] = useState({ name: 'Cargando...', email: '', initials: '...', id: 1, role: 'operador' });
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     fetch('/api/me')
       .then(res => res.json())
-      .then(data => setUser(data))
+      .then(data => {
+        setUser(data);
+        // Sync localStorage with the actual user ID from the server
+        // This auto-corrects stale/invalid user IDs stored in localStorage
+        if (data && data.id) {
+          localStorage.setItem('atenea_user_id', data.id.toString());
+        }
+      })
       .catch(err => console.error("Error fetching user:", err));
+
+    fetch('/api/usuarios')
+      .then(res => res.json())
+      .then(data => setUsersList(data))
+      .catch(err => console.error("Error fetching users:", err));
   }, []);
+
+  const handleUserChange = (userId: number) => {
+    localStorage.setItem('atenea_user_id', userId.toString());
+    window.location.reload();
+  };
 
   const navItems = [
     { id: 'home', label: 'Inicio', icon: LayoutDashboard },
@@ -35,8 +57,13 @@ export default function App() {
     { id: 'agenda_pro', label: 'Agenda Pro', icon: ListTodo },
     { id: 'dashboard2', label: 'Dashboard Pro', icon: BarChart3 },
     { id: 'history2', label: 'Historial Pro', icon: History },
-    { id: 'agenda2', label: 'Consola Focus', icon: BrainCircuit },
+    { id: 'planilla', label: 'Reporte de Tiempos', icon: Clock },
+    { id: 'rules', label: 'Reglas de Negocio', icon: BrainCircuit },
   ];
+
+  if (user?.role === 'supervisor') {
+    navItems.push({ id: 'productivity', label: 'Productividad Global', icon: BarChart3 });
+  }
 
   return (
     <div className="min-h-screen bg-[#F8F7FF] text-slate-800 flex overflow-hidden">
@@ -101,8 +128,11 @@ export default function App() {
         </nav>
 
         {/* User Profile Section at bottom */}
-        <div className="p-6 border-t border-white/5">
-          <div className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
+        <div className="p-6 border-t border-white/5 relative">
+          <div 
+            onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+            className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer group"
+          >
             <div className="relative">
               <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-400 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-lg">
                 {user.initials}
@@ -117,6 +147,34 @@ export default function App() {
             )}
             {isSidebarOpen && <Menu size={14} className="text-white/20 group-hover:text-white/50" />}
           </div>
+
+          {/* Dropdown for User Selection */}
+          <AnimatePresence>
+            {isUserDropdownOpen && isSidebarOpen && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute bottom-full left-6 w-60 mb-2 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 flex flex-col max-h-[300px]"
+              >
+                <div className="p-3 bg-slate-50 border-b border-slate-100">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Cambiar Usuario (Mock)</span>
+                </div>
+                <div className="overflow-y-auto flex-1 custom-scrollbar">
+                  {usersList.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => handleUserChange(u.id)}
+                      className={`w-full text-left p-3 hover:bg-slate-50 flex flex-col gap-0.5 transition-colors ${user.id === u.id ? 'bg-primary/5 border-l-2 border-primary' : ''}`}
+                    >
+                      <span className="text-xs font-bold text-slate-700">{u.nombre}</span>
+                      <span className="text-[10px] text-slate-400">{u.email}</span>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </aside>
 
@@ -154,6 +212,9 @@ export default function App() {
                 />
               )}
               {currentView === 'history2' && <HistoryView2 />}
+              {currentView === 'productivity' && <ProductivityView />}
+              {currentView === 'planilla' && <TimeReportView />}
+              {currentView === 'rules' && <RulesView />}
             </motion.div>
           </AnimatePresence>
         </div>

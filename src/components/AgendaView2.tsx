@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, Circle, AlertTriangle, Calendar as CalendarIcon, Save, PlusCircle, Clock, Tag, X, Loader2, Link as LinkIcon, Paperclip, Plus, Trash2, BrainCircuit, Activity, TrendingUp, BarChart3, CheckCircle, Zap, ListChecks } from 'lucide-react';
+import { getStatusColor, getPriorityColor } from '../utils/colors';
 
 interface Task {
   id: number;
@@ -17,6 +18,7 @@ interface Task {
   tiempo_asignado_minutos?: number;
   tiempo_invertido_minutos?: number;
   backlog_id?: number;
+  created_at?: string;
 }
 
 interface Plan {
@@ -47,15 +49,6 @@ interface Bloque {
   tipo: string;
 }
 
-const getPriorityInfo = (value: number) => {
-  switch (value) {
-    case 10: return { label: 'CRÍTICA', color: 'bg-[#FF4B4B]', text: 'text-white' };
-    case 7: return { label: 'ALTA', color: 'bg-[#FF9F1C]', text: 'text-white' };
-    case 4: return { label: 'MEDIA', color: 'bg-[#2D7FF9]', text: 'text-white' };
-    case 2: return { label: 'BAJA', color: 'bg-[#94A3B8]', text: 'text-white' };
-    default: return { label: 'MEDIA', color: 'bg-[#2D7FF9]', text: 'text-white' };
-  }
-};
 
 const EXECUTED_STATUSES = ['en espera', 'en curso', 'en estudio', 'terminada', 'despriorizada'];
 
@@ -68,6 +61,26 @@ const getFirstTime = (timeStr: string | undefined) => {
   return timeStr;
 };
 
+const getAge = (createdAt: string | undefined): string => {
+  if (!createdAt) return '';
+  try {
+    const created = new Date(createdAt.includes('T') ? createdAt : createdAt + 'T00:00:00');
+    const now = new Date();
+    const diffMs = now.getTime() - created.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'ahora';
+    if (diffMins < 60) return `${diffMins}m`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 30) return `${diffDays}d`;
+    const diffMonths = Math.floor(diffDays / 30);
+    return `${diffMonths}mes`;
+  } catch {
+    return '';
+  }
+};
+
 function TaskCard({ task, isClosed, updateTask, getFirstTime, onOpenDetails }: { 
   task: Task, 
   isClosed: boolean, 
@@ -75,39 +88,33 @@ function TaskCard({ task, isClosed, updateTask, getFirstTime, onOpenDetails }: {
   getFirstTime: (timeStr: string | undefined) => string,
   onOpenDetails: (task: Task) => void
 }) {
-  const statusConfig: Record<string, { bg: string, border: string, text: string, accent: string, label: string }> = {
-    'nuevo': { bg: 'bg-white', border: 'border-slate-100', text: 'text-slate-700', accent: 'bg-slate-200', label: 'NUEVO' },
-    'abierto': { bg: 'bg-white', border: 'border-blue-100', text: 'text-slate-700', accent: 'bg-blue-400', label: 'ABIERTO' },
-    'pendiente': { bg: 'bg-sky-50/30', border: 'border-sky-100', text: 'text-slate-700', accent: 'bg-sky-400', label: 'PENDIENTE' },
-    'en espera': { bg: 'bg-amber-50/50', border: 'border-amber-100', text: 'text-slate-700', accent: 'bg-amber-400', label: 'EN ESPERA' },
-    'resuelto': { bg: 'bg-emerald-50/40', border: 'border-emerald-200', text: 'text-slate-400', accent: 'bg-emerald-500', label: 'RESUELTO' },
-    'terminada': { bg: 'bg-emerald-50/40', border: 'border-emerald-200', text: 'text-slate-400', accent: 'bg-emerald-500', label: 'RESUELTO' },
-    'despriorizado': { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-400', accent: 'bg-slate-300', label: 'DESPRIORIZADO' },
-    'fallido': { bg: 'bg-rose-50/50', border: 'border-rose-100', text: 'text-slate-700', accent: 'bg-rose-500', label: 'FALLO' },
-    'fallo': { bg: 'bg-rose-50/50', border: 'border-rose-100', text: 'text-slate-700', accent: 'bg-rose-500', label: 'FALLO' }
-  };
-
-  const config = statusConfig[task.estado_ejecucion] || statusConfig['nuevo'];
+  const sc = getStatusColor(task.estado_ejecucion);
+  const pc = getPriorityColor(task.prioridad);
   const isDone = task.estado_ejecucion === 'resuelto' || task.estado_ejecucion === 'terminada';
 
   return (
     <motion.div 
       layout
-      className={`rounded-[24px] border ${config.border} ${config.bg} hover:shadow-xl transition-all duration-300 flex flex-col p-5 gap-4 relative group shadow-sm overflow-hidden`}
+      className={`rounded-[24px] border ${sc.cardBorder} ${sc.cardBg} hover:shadow-xl transition-all duration-300 flex flex-col p-5 gap-4 relative group shadow-sm overflow-hidden`}
     >
-      {/* Barra lateral de estado */}
-      <div className={`absolute top-0 left-0 w-1.5 h-full ${config.accent}`} />
+      {/* Barra lateral de estado (color del status) */}
+      <div className={`absolute top-0 left-0 w-1.5 h-full ${sc.accent}`} />
 
       <div className="flex items-start justify-between ml-1">
-        <div className="flex flex-wrap gap-2">
-          <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase text-white shadow-sm ${getPriorityInfo(task.prioridad).color}`}>
-            {getPriorityInfo(task.prioridad).label}
+        <div className="flex flex-wrap gap-1.5">
+          {/* Priority badge */}
+          <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase shadow-sm ${pc.badge}`}>
+            {pc.label}
+          </span>
+          {/* Status badge */}
+          <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase border shadow-sm ${sc.badge} ${sc.badgeBorder}`}>
+            {sc.label}
           </span>
           {task.area && (
             <span className="text-[8px] font-black text-slate-500 bg-white px-2 py-1 rounded-lg uppercase border border-slate-100 shadow-sm">{task.area}</span>
           )}
         </div>
-        <div className={`transition-all duration-500 ${isDone ? 'text-emerald-500 scale-110' : 'text-slate-200'}`}>
+        <div className={`transition-all duration-500 ${isDone ? 'text-[#858585] scale-110' : 'text-slate-200'}`}>
           {isDone ? <CheckCircle2 size={20} /> : <Circle size={20} />}
         </div>
       </div>
@@ -118,24 +125,22 @@ function TaskCard({ task, isClosed, updateTask, getFirstTime, onOpenDetails }: {
         </h4>
         {isDone && (
           <div className="absolute -right-2 -bottom-2 opacity-10 pointer-events-none select-none">
-             <span className="text-4xl font-black text-emerald-500 rotate-[-12deg] block">DONE</span>
+             <span className="text-4xl font-black text-[#858585] rotate-[-12deg] block">DONE</span>
           </div>
         )}
       </div>
 
       <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-50/50 ml-1">
         <div className="flex items-center gap-2">
-          <span className={`text-[9px] font-black px-2.5 py-1.5 rounded-xl uppercase tracking-tighter shadow-sm border ${
-            task.estado_ejecucion === 'resuelto' || task.estado_ejecucion === 'terminada' ? 'bg-emerald-500 text-white border-emerald-600' :
-            task.estado_ejecucion === 'fallo' || task.estado_ejecucion === 'fallido' ? 'bg-rose-500 text-white border-rose-600' :
-            task.estado_ejecucion === 'en espera' ? 'bg-amber-400 text-white border-amber-500' :
-            'bg-white text-slate-500 border-slate-100'
-          }`}>
-            {config.label}
-          </span>
           {task.hora_inicio_plan && (
             <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 bg-white/50 px-2 py-1 rounded-lg border border-slate-50">
               <Clock size={12} className="text-slate-300" /> {getFirstTime(task.hora_inicio_plan)}
+            </div>
+          )}
+          {task.created_at && (
+            <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-1 rounded-lg" title={`Creado: ${task.created_at}`}>
+              <span className="text-[9px] font-black text-slate-300">hace</span>
+              <span className="text-[9px] font-black text-slate-500">{getAge(task.created_at)}</span>
             </div>
           )}
         </div>
@@ -150,7 +155,7 @@ function TaskCard({ task, isClosed, updateTask, getFirstTime, onOpenDetails }: {
           <button 
             onClick={() => onOpenDetails(task)}
             className={`p-2.5 transition-all rounded-2xl shadow-lg hover:scale-110 active:scale-95 ${
-              isDone ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-slate-900 text-white shadow-slate-200'
+              isDone ? 'bg-[#858585] text-white shadow-gray-100' : 'bg-slate-900 text-white shadow-slate-200'
             }`}
           >
             <Plus size={18} />
@@ -161,7 +166,7 @@ function TaskCard({ task, isClosed, updateTask, getFirstTime, onOpenDetails }: {
   );
 }
 
-function IncidentCard({ incident }: { incident: Incidencia }) {
+function IncidentCard({ incident, onDelete }: { incident: Incidencia; onDelete?: () => void }) {
   return (
     <motion.div 
       layout
@@ -188,7 +193,16 @@ function IncidentCard({ incident }: { incident: Incidencia }) {
 
       <div className="mt-auto pt-3 border-t border-amber-100 flex items-center justify-between">
         <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Actividad No Planificada</span>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-2">
+          {onDelete && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); onDelete(); }} 
+              className="text-amber-600/60 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-all"
+              title="Eliminar actividad no planificada"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
           <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
         </div>
       </div>
@@ -238,6 +252,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
   setSelectedDate: (date: string) => void
 }) {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [backlog, setBacklog] = useState<any[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [bloques, setBloques] = useState<Bloque[]>([]);
@@ -252,7 +267,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
   const [isClosing, setIsClosing] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [newIncident, setNewIncident] = useState<Partial<Incidencia>>({
-    tipo: 'Interrupción',
+    tipo: 'Almuerzo',
     hora_inicio: '',
     hora_fin: '',
     descripcion: ''
@@ -267,16 +282,20 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
     const weights: Record<number, number> = { 10: 2, 7: 1.5, 4: 1, 2: 0.5 };
     let usedHours = 0;
     tasks.forEach(t => {
-      const baseHours = weights[t.prioridad] || 1;
+      const baseHours = (t.tiempo_asignado_minutos !== undefined && t.tiempo_asignado_minutos !== null && t.tiempo_asignado_minutos > 0)
+        ? (t.tiempo_asignado_minutos / 60)
+        : (weights[t.prioridad] || 1);
       const status = (t.estado_ejecucion || 'nuevo').toLowerCase();
       
-      if (status === 'nuevo' || status === 'abierto') {
+      if (status === 'nuevo' || status === 'abierto' || status === 'pendiente' || status === 'en curso' || status === 'en estudio') {
         usedHours += baseHours; // Trabajo Activo o Planeado: 100% carga
       } else if (status === 'en espera') {
         usedHours += baseHours * 0.5; // Bloqueado: Libera el 50% para permitir rotación
-      } else if (status === 'resuelto') {
+      } else if (status === 'resuelto' || status === 'terminada') {
         // Usa tiempo invertido si existe (convertido a horas), sino asume 30 min por defecto
-        usedHours += t.tiempo_invertido_minutos ? (t.tiempo_invertido_minutos / 60) : 0.5; 
+        usedHours += (t.tiempo_invertido_minutos !== undefined && t.tiempo_invertido_minutos !== null && t.tiempo_invertido_minutos > 0)
+          ? (t.tiempo_invertido_minutos / 60)
+          : 0.5; 
       }
       // Despriorizado y Fallido consumen 0 horas
     });
@@ -318,6 +337,14 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
       })));
       setPlan(data.plan || null);
       
+      try {
+        const backlogRes = await fetch('/api/backlog');
+        const backlogData = await backlogRes.json();
+        setBacklog(Array.isArray(backlogData) ? backlogData : []);
+      } catch (e) {
+        console.error("Error fetching backlog in AgendaView2:", e);
+      }
+      
       const incRes = await fetch(`/api/incidencias?fecha=${selectedDate}`);
       const incData = await incRes.json();
       setIncidencias(Array.isArray(incData) ? incData : []);
@@ -330,6 +357,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
       const currentDayName = dayNames[new Date(selectedDate + 'T12:00:00').getDay()];
       
       const filteredBloques = Array.isArray(bloqData) ? bloqData.filter((b: Bloque) => {
+        if (b.descripcion && b.descripcion.startsWith("Incidencia: ")) return false;
         if (b.fecha === selectedDate) return true;
         if (b.dia_semana === currentDayName) return true;
         return false;
@@ -409,11 +437,21 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
     if (res.ok) {
       setShowIncidentModal(false);
       setNewIncident({
-        tipo: 'Interrupción',
+        tipo: 'Almuerzo',
         hora_inicio: '',
         hora_fin: '',
         descripcion: ''
       });
+      fetchData();
+    }
+  };
+
+  const deleteIncident = async (id: number) => {
+    if (!window.confirm?.('¿Estás seguro de que deseas eliminar esta actividad no planificada?')) {
+      return;
+    }
+    const res = await fetch(`/api/incidencias/${id}`, { method: 'DELETE' });
+    if (res.ok) {
       fetchData();
     }
   };
@@ -503,6 +541,8 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
     return acc + (isExecuted ? (Number(t.prioridad) || 0) : 0);
   }, 0);
   const porcentajeEstrategico = pesoTotal > 0 ? Math.round((pesoCompletado / pesoTotal) * 100) : 0;
+  const floatingPendingCount = backlog.filter(t => t.status === 'pendiente' || t.status === 'nuevo').length;
+  const floatingWaitingCount = backlog.filter(t => t.status === 'en espera').length;
 
   // Resumen por nivel
   const stats = {
@@ -642,7 +682,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                      tipo === 'Centro de Módulo' ? 'bg-purple-400' : 'bg-slate-400'
                    }`} />
                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{tipo}</span>
-                   <span className="text-xs font-black text-slate-700">{formatTime(mins)}</span>
+                   <span className="text-xs font-black text-slate-700">{Math.round((mins / ((plan?.horas_efectivas || 6.0) * 60)) * 100)}%</span>
                 </div>
               ))}
            </div>
@@ -671,7 +711,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
       {isClosed && (
         <div className="bg-[#7DA81A]/10 border border-[#7DA81A]/20 text-[#7DA81A] px-6 py-4 rounded-[24px] flex items-center shadow-sm">
           <CheckCircle2 size={24} className="mr-3" />
-          <span className="font-bold">Día cerrado correctamente. Todas las actividades han sido registradas.</span>
+          <span className="font-bold">Turno finalizado correctamente. Todas las actividades han sido registradas.</span>
         </div>
       )}
 
@@ -694,9 +734,9 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tanque de Energía</span>
                 <div className="flex items-baseline gap-1">
                   <span className={`text-2xl font-black ${timeInfo.remainingHours > 1 ? 'text-emerald-500' : 'text-amber-500'}`}>
-                    {timeInfo.remainingHours.toFixed(1)}h
+                    {Math.max(0, Math.round(100 - timeInfo.percentage))}%
                   </span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">libres</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">libre</span>
                 </div>
               </div>
               <div className="h-10 w-px bg-slate-100 hidden md:block" />
@@ -708,6 +748,17 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                 <div className="flex flex-col">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Altas</span>
                   <span className="text-sm font-black text-slate-700">{stats.altas.done}/{stats.altas.total}</span>
+                </div>
+              </div>
+              <div className="h-10 w-px bg-slate-100 hidden md:block" />
+              <div className="flex gap-4">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Flotantes (Pendiente)</span>
+                  <span className="text-sm font-black text-primary text-center">{floatingPendingCount}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Flotantes (Espera)</span>
+                  <span className="text-sm font-black text-primary text-center">{floatingWaitingCount}</span>
                 </div>
               </div>
             </div>
@@ -725,19 +776,21 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                      <Zap size={10} /> Capacidad Utilizada: {timeInfo.percentage.toFixed(0)}%
                   </p>
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                     Meta: {timeInfo.availableHours}h
+                     Capacidad Total: 100%
                   </p>
                </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowIncidentModal(true)}
-                className="flex items-center gap-2 px-6 py-3.5 bg-amber-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg shadow-amber-100"
-              >
-                <PlusCircle size={18} />
-                Registrar No Planificada
-              </button>
+              {!isClosed && (
+                <button
+                  onClick={() => setShowIncidentModal(true)}
+                  className="flex items-center gap-2 px-5 py-3.5 bg-amber-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 active:scale-95 transition-all shadow-lg shadow-amber-100"
+                >
+                  <PlusCircle size={16} />
+                  + Registrar
+                </button>
+              )}
               <button 
                 onClick={handleFinishDay}
                 disabled={isClosing || isClosed}
@@ -748,35 +801,111 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                 }`}
               >
                 {isClosing ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                {isClosed ? 'Día Finalizado' : 'Finalizar Día'}
+                {isClosed ? 'Turno Finalizado' : 'Finalizar Turno'}
               </button>
             </div>
           </div>
 
-          {/* Grid de Tareas e Incidencias */}
-          {tasks.length === 0 ? (
-            <div className="bg-white rounded-[40px] border border-slate-100 p-20 text-center shadow-xl shadow-slate-100/50">
-              <p className="text-slate-400 font-black text-xs uppercase tracking-widest">No hay tareas para esta fecha.</p>
+          {/* Layout principal: Grid de tareas + Sidebar derecha */}
+          <div className="flex gap-6 items-start">
+            {/* Grid de tareas (solo tareas, sin bloques ni incidencias) */}
+            <div className="flex-1 min-w-0">
+              {tasks.length === 0 ? (
+                <div className="bg-white rounded-[40px] border border-slate-100 p-20 text-center shadow-xl shadow-slate-100/50">
+                  <p className="text-slate-400 font-black text-xs uppercase tracking-widest">No hay actividades para esta fecha.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[...tasks]
+                    .sort((a, b) => (b.prioridad || 0) - (a.prioridad || 0))
+                    .map((task) => (
+                      <TaskCard 
+                        key={task.id} 
+                        task={task} 
+                        isClosed={isClosed} 
+                        updateTask={updateTask}
+                        getFirstTime={getFirstTime}
+                        onOpenDetails={(t) => setEditingTask(t)}
+                      />
+                    ))}
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {incidencias.map((inc, idx) => (
-                <IncidentCard key={`inc-${idx}`} incident={inc} />
-              ))}
-              {[...tasks]
-                .sort((a, b) => (b.prioridad || 0) - (a.prioridad || 0))
-                .map((task) => (
-                  <TaskCard 
-                    key={task.id} 
-                    task={task} 
-                    isClosed={isClosed} 
-                    updateTask={updateTask}
-                    getFirstTime={getFirstTime}
-                    onOpenDetails={(t) => setEditingTask(t)}
-                  />
-                ))}
-            </div>
-          )}
+
+            {/* Sidebar derecha: Excepciones + Tiempo No Planificado */}
+            {(bloques.length > 0 || incidencias.length > 0) && (
+              <div className="w-64 shrink-0 flex flex-col gap-5">
+
+                {/* Sección: Excepción */}
+                {bloques.length > 0 && (
+                  <div>
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] mb-3 flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-slate-300" />
+                      Excepción
+                    </h4>
+                    <div className="flex flex-col gap-2">
+                      {bloques.map((block, idx) => (
+                        <div key={`sb-block-${idx}`} className="bg-slate-50 border border-slate-200/60 border-dashed rounded-2xl px-4 py-3 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[8px] font-black px-2 py-0.5 rounded-md uppercase bg-slate-200 text-slate-500 flex items-center gap-1">
+                              <Clock size={8} /> {block.tipo}
+                            </span>
+                            <span className="text-[8px] font-black text-slate-400">{block.hora_inicio}–{block.hora_fin}</span>
+                          </div>
+                          <p className="text-[10px] font-black text-slate-600 leading-tight">Sincronizado de Centro de Módulo</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sección: Tiempo No Planificado */}
+                {incidencias.length > 0 && (
+                  <div>
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] mb-3 flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-amber-400" />
+                      Tiempo No Planificado
+                    </h4>
+                    <div className="flex flex-col gap-2">
+                      {incidencias.map((inc, idx) => (
+                        <div key={`sb-inc-${idx}`} className={`rounded-2xl border px-4 py-3 flex flex-col gap-2 relative ${
+                          inc.tipo === 'Almuerzo' ? 'bg-amber-50/60 border-amber-100' :
+                          inc.tipo === 'Reunión' ? 'bg-blue-50/60 border-blue-100' :
+                          inc.tipo === 'Personal' ? 'bg-purple-50/60 border-purple-100' :
+                          'bg-orange-50/60 border-orange-100'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase flex items-center gap-1 ${
+                              inc.tipo === 'Almuerzo' ? 'bg-amber-500 text-white' :
+                              inc.tipo === 'Reunión' ? 'bg-blue-500 text-white' :
+                              inc.tipo === 'Personal' ? 'bg-purple-500 text-white' :
+                              'bg-orange-500 text-white'
+                            }`}>
+                              <AlertTriangle size={8} /> {inc.tipo}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[8px] font-black text-slate-500">{inc.hora_inicio}–{inc.hora_fin}</span>
+                              {!isClosed && inc.id && (
+                                <button 
+                                  onClick={() => deleteIncident(inc.id!)} 
+                                  className="text-slate-300 hover:text-red-500 transition-colors p-0.5"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[10px] font-black text-slate-600 leading-tight line-clamp-2">{inc.descripcion}</p>
+                          <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Actividad No Planificada</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            )}
+          </div>
 
           {/* Panel de Cierre de Jornada (Resumen Consolidado) */}
           <motion.div 
@@ -865,19 +994,10 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                                    </span>
                                 </td>
                                 <td className="py-5 px-4 text-center">
-                                   <span className={`text-[9px] font-black px-2 py-1 rounded-md border ${
-                                      task.estado_ejecucion === 'nuevo' ? 'bg-amber-50 border-amber-100 text-amber-600' :
-                                      task.estado_ejecucion === 'abierto' ? 'bg-red-50 border-red-100 text-red-600' :
-                                      task.estado_ejecucion === 'pendiente' ? 'bg-sky-50 border-sky-100 text-sky-500' :
-                                      task.estado_ejecucion === 'en espera' ? 'bg-slate-900 border-slate-900 text-white' :
-                                      task.estado_ejecucion === 'resuelto' || task.estado_ejecucion === 'terminada' ? 'bg-slate-100 border-slate-200 text-slate-500' :
-                                      task.estado_ejecucion === 'despriorizado' ? 'bg-slate-50 border-slate-100 text-slate-400' :
-                                      task.estado_ejecucion === 'fallido' || task.estado_ejecucion === 'fallo' ? 'bg-rose-50 border-rose-100 text-rose-700' :
-                                      'bg-slate-50 border-slate-200 text-slate-400'
-                                   }`}>
-                                      {task.estado_ejecucion?.toUpperCase() || 'PENDIENTE'}
-                                   </span>
-                                </td>
+                                    <span className={`text-[9px] font-black px-2 py-1 rounded-md border ${getStatusColor(task.estado_ejecucion).badge} ${getStatusColor(task.estado_ejecucion).badgeBorder}`}>
+                                       {getStatusColor(task.estado_ejecucion).label}
+                                    </span>
+                                 </td>
                                 <td className="py-5 px-4">
                                    <p className="text-[11px] font-medium text-slate-600 leading-relaxed max-w-xs italic">
                                       {task.hallazgos ? `"${task.hallazgos}"` : <span className="text-slate-400 opacity-50">— Sin comentarios —</span>}
@@ -918,9 +1038,9 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                   onChange={(e) => setNewIncident({...newIncident, tipo: e.target.value})}
                   className="w-full p-3 rounded-xl border border-[#d6d3d1] outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                 >
-                  <option value="Interrupción">Interrupción</option>
+                  <option value="Almuerzo">Almuerzo</option>
                   <option value="Reunión">Reunión</option>
-                  <option value="Rome_fila">Rompe_fila</option>
+                  <option value="Personal">Personal</option>
                   <option value="Otro">Otro</option>
                 </select>
               </div>
@@ -980,7 +1100,15 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
               <div className="space-y-3">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Clock size={14} /> Estado de Ejecución</label>
                 <div className="flex bg-slate-100/50 p-1.5 rounded-2xl border border-slate-100 gap-1.5 flex-wrap">
-                  {[{ id: 'nuevo', label: 'NUEVO', color: 'bg-cyan-500' }, { id: 'abierto', label: 'ABIERTO', color: 'bg-purple-500' }, { id: 'pendiente', label: 'PENDIENTE', color: 'bg-blue-500' }, { id: 'en espera', label: 'EN ESPERA', color: 'bg-amber-500' }, { id: 'resuelto', label: 'RESUELTO', color: 'bg-emerald-500' }, { id: 'despriorizado', label: 'DESPRIORIZADO', color: 'bg-slate-500' }, { id: 'fallo', label: 'FALLO', color: 'bg-red-500' }].map((state) => (
+                  {[
+                    { id: 'nuevo',         label: 'NUEVO',         color: 'bg-[#FFE017] text-[#5C4200]' },
+                    { id: 'abierto',       label: 'ABIERTO',       color: 'bg-[#ED1650] text-white' },
+                    { id: 'pendiente',     label: 'PENDIENTE',     color: 'bg-[#00D6CC] text-white' },
+                    { id: 'en espera',     label: 'EN ESPERA',     color: 'bg-[#1B1B1B] text-white' },
+                    { id: 'resuelto',      label: 'RESUELTO',      color: 'bg-[#858585] text-white' },
+                    { id: 'despriorizado', label: 'DESPRIORIZADO', color: 'bg-[#B8B8B8] text-[#4D4D4D]' },
+                    { id: 'fallo',         label: 'FALLO',         color: 'bg-[#B20F3B] text-white' },
+                  ].map((state) => (
                     <button 
                       key={state.id} 
                       disabled={isClosed} 
@@ -989,38 +1117,13 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                         updateTask(editingTask.id, { estado_ejecucion: state.id, completada: isDone }); 
                         setEditingTask({...editingTask, estado_ejecucion: state.id, completada: isDone}); 
                       }} 
-                      className={`text-[9px] font-black px-4 py-2.5 rounded-xl transition-all ${editingTask.estado_ejecucion === state.id ? `${state.color} text-white shadow-lg scale-105 ring-2 ring-offset-2 ring-current/20` : 'bg-white text-slate-400 hover:text-slate-600 border border-slate-200/50'}`}
+                      className={`text-[9px] font-black px-4 py-2.5 rounded-xl transition-all ${editingTask.estado_ejecucion === state.id ? `${state.color} shadow-lg scale-105 ring-2 ring-offset-2 ring-black/10` : 'bg-white text-slate-400 hover:text-slate-600 border border-slate-200/50'}`}
                     >
                       {state.label}
                     </button>
                   ))}
                 </div>
-                {editingTask.estado_ejecucion === 'resuelto' && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-4 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3 text-emerald-700">
-                      <Clock size={18} />
-                      <span className="text-xs font-black uppercase tracking-widest">¿Cuánto tiempo real invertiste?</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input 
-                        type="number"
-                        value={editingTask.tiempo_invertido_minutos || ''}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10) || 0;
-                          setEditingTask({...editingTask, tiempo_invertido_minutos: val});
-                          updateTask(editingTask.id, { tiempo_invertido_minutos: val });
-                        }}
-                        className="w-20 p-2 rounded-xl border border-emerald-200 outline-none focus:ring-2 focus:ring-emerald-500 text-center font-black text-slate-700 text-sm"
-                        placeholder="min"
-                      />
-                      <span className="text-[10px] font-black text-emerald-600 uppercase">minutos</span>
-                    </div>
-                  </motion.div>
-                )}
+
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-3">

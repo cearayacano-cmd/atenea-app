@@ -27,10 +27,10 @@ interface Bloque {
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 const TIPOS = ['Almuerzo', 'Reunión', 'Personal', 'Otro'];
 const PRIORITIES = [
-  { label: 'CRÍTICA', value: 10, color: 'var(--color-accent)', mins: 120 },
-  { label: 'ALTA', value: 7, color: 'var(--color-primary)', mins: 90 },
-  { label: 'MEDIA', value: 4, color: '#00A6D4', mins: 45 },
-  { label: 'BAJA', value: 2, color: '#B8B8B8', mins: 15 },
+  { label: 'CRÍTICA', value: 10, color: '#DC2626', mins: 120 },
+  { label: 'ALTA', value: 7, color: '#F97316', mins: 90 },
+  { label: 'MEDIA', value: 4, color: '#F59E0B', mins: 45 },
+  { label: 'BAJA', value: 2, color: '#10B981', mins: 15 },
 ];
 
 export default function CommandCenterView() {
@@ -442,7 +442,7 @@ export default function CommandCenterView() {
                     <p className="text-[10px] font-black text-primary truncate">{b.dia_semana || b.fecha}</p>
                     <p className="text-[9px] font-bold text-text-strong truncate">{b.tipo} | {b.hora_inicio}-{b.hora_fin}</p>
                   </div>
-                  <button onClick={() => deleteBloque(b.id)} className="p-1.5 text-text-muted hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                  <button onClick={() => deleteBloque(b.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all" title="Eliminar bloque">
                     <Trash2 size={14} />
                   </button>
                 </div>

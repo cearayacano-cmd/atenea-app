@@ -12,10 +12,10 @@ interface BacklogItem {
 }
 
 const PRIORITIES = [
-  { label: 'CRÍTICA', value: 10, color: 'bg-accent' },
-  { label: 'ALTA', value: 7, color: 'bg-primary' },
-  { label: 'MEDIA', value: 4, color: 'bg-[#00A6D4]' },
-  { label: 'BAJA', value: 2, color: 'bg-[#B8B8B8]' },
+  { label: 'CRÍTICA', value: 10, color: 'bg-red-600' },
+  { label: 'ALTA', value: 7, color: 'bg-orange-500' },
+  { label: 'MEDIA', value: 4, color: 'bg-amber-500' },
+  { label: 'BAJA', value: 2, color: 'bg-emerald-500' },
 ];
 
 const STATUSES = [

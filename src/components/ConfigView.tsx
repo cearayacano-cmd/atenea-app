@@ -341,7 +341,8 @@ export default function ConfigView() {
                   </div>
                   <button 
                     onClick={() => deleteBloque(bloque.id)}
-                    className="p-2 text-text-muted hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    title="Eliminar bloque recurrente"
                   >
                     <Trash2 size={18} />
                   </button>
@@ -421,7 +422,8 @@ export default function ConfigView() {
                   </div>
                   <button 
                     onClick={() => deleteBloque(bloque.id)}
-                    className="p-2 text-text-muted hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    title="Eliminar bloque específico"
                   >
                     <Trash2 size={18} />
                   </button>

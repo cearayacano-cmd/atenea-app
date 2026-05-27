@@ -60,7 +60,7 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
   const [isClosing, setIsClosing] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [newIncident, setNewIncident] = useState<Partial<Incidencia>>({
-    tipo: 'Interrupción',
+    tipo: 'Almuerzo',
     hora_inicio: '',
     hora_fin: '',
     descripcion: ''
@@ -121,11 +121,21 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
     if (res.ok) {
       setShowIncidentModal(false);
       setNewIncident({
-        tipo: 'Interrupción',
+        tipo: 'Almuerzo',
         hora_inicio: '',
         hora_fin: '',
         descripcion: ''
       });
+      fetchData();
+    }
+  };
+
+  const deleteIncident = async (id: number) => {
+    if (!window.confirm?.('¿Estás seguro de que deseas eliminar esta actividad no planificada?')) {
+      return;
+    }
+    const res = await fetch(`/api/incidencias/${id}`, { method: 'DELETE' });
+    if (res.ok) {
       fetchData();
     }
   };
@@ -678,9 +688,20 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
                           <Clock size={14} className="mr-2 text-text-muted" />
                           {inc.hora_inicio} – {inc.hora_fin}
                         </div>
-                        <span className="text-[10px] font-bold text-text-muted bg-bg-main border border-border-soft px-2 py-1 rounded-lg uppercase tracking-widest">
-                          {inc.tipo}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold text-text-muted bg-bg-main border border-border-soft px-2 py-1 rounded-lg uppercase tracking-widest">
+                            {inc.tipo}
+                          </span>
+                          {!isClosed && inc.id && (
+                            <button 
+                              onClick={() => deleteIncident(inc.id!)}
+                              className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-all"
+                              title="Eliminar actividad no planificada"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <p className="text-sm text-text-strong leading-relaxed">{inc.descripcion}</p>
                     </div>
@@ -746,9 +767,9 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
                   onChange={(e) => setNewIncident({...newIncident, tipo: e.target.value})}
                   className="w-full p-3 rounded-xl border border-[#d6d3d1] outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                 >
-                  <option value="Interrupción">Interrupción</option>
+                  <option value="Almuerzo">Almuerzo</option>
                   <option value="Reunión">Reunión</option>
-                  <option value="Rome_fila">Rompe_fila</option>
+                  <option value="Personal">Personal</option>
                   <option value="Otro">Otro</option>
                 </select>
               </div>

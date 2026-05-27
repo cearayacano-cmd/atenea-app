@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atenea - Simulador de Ocupabilidad Calidad Fábrica</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            outfit: ['Outfit', 'sans-serif'],
+            jakarta: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            primary: '#0f004f',
+            accent: '#ff0055',
+            radar: '#4F46E5',
+            hipotesis: '#0EA5E9',
+            escuchas: '#F59E0B',
+            lcoach: '#10B981',
+            analisis: '#8B5CF6',
+            slides: '#EC4899',
+            focos: '#EF4444',
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-[#F8F7FF] text-slate-800 font-jakarta min-h-screen pb-20">
+
+  <!-- Header -->
+  <header class="bg-[#0f004f] text-white py-8 px-6 shadow-2xl relative overflow-hidden">
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(27,0,136,0.8),transparent)] z-0"></div>
+    <div class="max-w-6xl mx-auto relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div>
+        <div class="flex items-center gap-2 mb-2">
+          <span class="px-2.5 py-1 bg-red-500/20 text-red-400 rounded-full text-[10px] font-black tracking-widest uppercase">PROTOTIPO INTERACTIVO</span>
+          <span class="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-[10px] font-black tracking-widest uppercase">SIN TIMER ACTIVO</span>
+        </div>
+        <h1 class="text-3xl font-black font-outfit tracking-tight">Hipótesis de Ocupabilidad - Calidad Fábrica</h1>
+        <p class="text-white/60 text-xs font-medium mt-1">Simulación visual de planificación de carga estratégica e inferencia de ocupabilidad basada en estados.</p>
+      </div>
+      <a href="/" class="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-white/10 flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i> Volver a Atenea
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 mt-10 space-y-10">
+
+    <!-- Sección 1: Estándares -->
+    <section class="bg-white rounded-3xl p-8 border border-slate-100 shadow-xl shadow-slate-200/50">
+      <div class="flex items-center gap-3 mb-6">
+        <div class="p-2 bg-indigo-50 text-radar rounded-xl"><i data-lucide="book-open" class="w-6 h-6"></i></div>
+        <div>
+          <h2 class="text-xl font-black font-outfit text-slate-800">Catálogo de Actividades Estándar (Calidad Fábrica)</h2>
+          <p class="text-xs text-slate-400 font-bold uppercase tracking-wider mt-0.5">Tareas alternas con duraciones preestablecidas</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- RADAR -->
+        <div class="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 hover:border-radar/30 transition-all">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-2.5 py-1 bg-radar/10 text-radar rounded-full text-[9px] font-black tracking-wider uppercase">RADAR</span>
+            <span class="text-xs font-black text-slate-700 flex items-center gap-1"><i data-lucide="clock" class="w-3.5 h-3.5"></i> 1h (60 min)</span>
+          </div>
+          <h3 class="text-xs font-bold text-slate-800 leading-snug">Revisión de indicadores entregados por RADAR</h3>
+          <p class="text-[10px] text-slate-400 mt-2">Keywords: <span class="font-bold">radar, indicador, indicadores</span></p>
+        </div>
+        <!-- HIPOTESIS -->
+        <div class="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 hover:border-hipotesis/30 transition-all">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-2.5 py-1 bg-hipotesis/10 text-hipotesis rounded-full text-[9px] font-black tracking-wider uppercase">HIPÓTESIS</span>
+            <span class="text-xs font-black text-slate-700 flex items-center gap-1"><i data-lucide="clock" class="w-3.5 h-3.5"></i> 1h 15m (75 min)</span>
+          </div>
+          <h3 class="text-xs font-bold text-slate-800 leading-snug">Hipótesis: planteamiento + contexto operacional</h3>
+          <p class="text-[10px] text-slate-400 mt-2">Keywords: <span class="font-bold">hipotesis, planteamiento, contexto</span></p>
+        </div>
+        <!-- ESCUCHAS -->
+        <div class="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 hover:border-escuchas/30 transition-all">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-2.5 py-1 bg-escuchas/10 text-escuchas rounded-full text-[9px] font-black tracking-wider uppercase">ESCUCHAS</span>
+            <span class="text-xs font-black text-slate-700 flex items-center gap-1"><i data-lucide="clock" class="w-3.5 h-3.5"></i> 2h 45m (165 min)</span>
+          </div>
+          <h3 class="text-xs font-bold text-slate-800 leading-snug">Escuchas y validación de hipótesis (en plataforma)</h3>
+          <p class="text-[10px] text-slate-400 mt-2">Keywords: <span class="font-bold">escucha, escuchas, validacion</span></p>
+        </div>
+        <!-- LCOACH -->
+        <div class="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 hover:border-lcoach/30 transition-all">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-2.5 py-1 bg-lcoach/10 text-lcoach rounded-full text-[9px] font-black tracking-wider uppercase">LCOACH</span>
+            <span class="text-xs font-black text-slate-700 flex items-center gap-1"><i data-lucide="clock" class="w-3.5 h-3.5"></i> 1h (60 min)</span>
+          </div>
+          <h3 class="text-xs font-bold text-slate-800 leading-snug">Validación hipótesis en conjunto con LCoach</h3>
+          <p class="text-[10px] text-slate-400 mt-2">Keywords: <span class="font-bold">lcoach, coach, l coach</span></p>
+        </div>
+        <!-- ANALISIS IA -->
+        <div class="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 hover:border-analisis/30 transition-all">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-2.5 py-1 bg-analisis/10 text-analisis rounded-full text-[9px] font-black tracking-wider uppercase">ANÁLISIS IA</span>
+            <span class="text-xs font-black text-slate-700 flex items-center gap-1"><i data-lucide="clock" class="w-3.5 h-3.5"></i> 1h (60 min)</span>
+          </div>
+          <h3 class="text-xs font-bold text-slate-800 leading-snug">Análisis con IA: descarga LEA + armado para IA</h3>
+          <p class="text-[10px] text-slate-400 mt-2">Keywords: <span class="font-bold">lea, ia, descarga lea, analisis ia</span></p>
+        </div>
+        <!-- SLIDES -->
+        <div class="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 hover:border-slides/30 transition-all">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-2.5 py-1 bg-slides/10 text-slides rounded-full text-[9px] font-black tracking-wider uppercase">SLIDES / PLAN</span>
+            <span class="text-xs font-black text-slate-700 flex items-center gap-1"><i data-lucide="clock" class="w-3.5 h-3.5"></i> 1h (60 min)</span>
+          </div>
+          <h3 class="text-xs font-bold text-slate-800 leading-snug">Armar slide y plan de acción para seguimiento</h3>
+          <p class="text-[10px] text-slate-400 mt-2">Keywords: <span class="font-bold">slide, slides, plan de accion</span></p>
+        </div>
+        <!-- FOCOS -->
+        <div class="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 hover:border-focos/30 transition-all">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-2.5 py-1 bg-focos/10 text-focos rounded-full text-[9px] font-black tracking-wider uppercase">FOCOS</span>
+            <span class="text-xs font-black text-slate-700 flex items-center gap-1"><i data-lucide="clock" class="w-3.5 h-3.5"></i> 1h (60 min)</span>
+          </div>
+          <h3 class="text-xs font-bold text-slate-800 leading-snug">Seguimiento de focos (en plataforma)</h3>
+          <p class="text-[10px] text-slate-400 mt-2">Keywords: <span class="font-bold">foco, focos, seguimiento focos</span></p>
+        </div>
+        <!-- PERSONALIZADA -->
+        <div class="border border-dashed border-slate-200 rounded-2xl p-4 bg-white flex flex-col justify-center items-center text-center">
+          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Carga Personalizada</span>
+          <p class="text-[10px] text-slate-400 font-medium px-2">Cualquier otra tarea se estima según la Prioridad:<br><span class="font-bold text-slate-600">Crítica = 120m, Alta = 90m, Media = 60m, Baja = 30m</span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sección 2: Simulador -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      
+      <!-- Panel de Control y Tareas (Simulador) -->
+      <div class="lg:col-span-7 bg-white rounded-3xl p-8 border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col gap-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><i data-lucide="sliders" class="w-6 h-6"></i></div>
+            <div>
+              <h2 class="text-lg font-black font-outfit text-slate-800">Simulador Diario del Operador</h2>
+              <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Controla los estados para simular la ocupabilidad</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-slate-400">Escenario:</span>
+            <select id="scenarioSelector" onchange="loadScenario(this.value)" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500">
+              <option value="balanced">Escenario A: Jornada Óptima (5h 45m)</option>
+              <option value="saturated">Escenario B: Saturated Day! (7h 45m)</option>
+              <option value="light">Escenario C: Alterna Liviana (3h)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Controles de Antigüedad y Turno -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-100/80">
+          <!-- Antigüedad del Agente -->
+          <div>
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 block flex items-center gap-1">
+              <i data-lucide="award" class="w-3.5 h-3.5 text-indigo-500"></i> Antigüedad / Seniority del Operador
+            </label>
+            <select id="senioritySelector" onchange="updateSeniority(this.value)" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 transition-colors">
+              <option value="junior">Junior (Curva de aprendizaje: 1.3x tiempo estándar)</option>
+              <option value="intermedio" selected>Intermedio (Eficiencia estándar: 1.0x tiempo)</option>
+              <option value="senior">Senior (Eficiencia avanzada: 0.8x tiempo)</option>
+            </select>
+          </div>
+          
+          <!-- Progreso del Turno -->
+          <div>
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 block flex justify-between">
+              <span class="flex items-center gap-1"><i data-lucide="activity" class="w-3.5 h-3.5 text-indigo-500"></i> Progreso del Turno Actual</span>
+              <span id="elapsedTimeBadge" class="text-indigo-600 font-bold">3.0h transcurridas</span>
+            </label>
+            <div class="flex items-center gap-3 mt-1.5">
+              <input type="range" id="shiftSlider" min="0" max="540" value="180" oninput="updateShiftProgress(this.value)" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+              <span class="text-[10px] font-black text-slate-500 shrink-0">9.0h Turno</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lista de tareas en simulación -->
+        <div class="space-y-4" id="tasksContainer">
+          <!-- Dinámico por JS -->
+        </div>
+
+        <!-- Creador de Tareas AI Mock -->
+        <div class="mt-4 p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+          <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-500"></i> Autodetector Inteligente Atenea IA
+          </label>
+          <p class="text-[10px] text-slate-500 leading-normal">
+            Escribe qué tarea vas a realizar. Atenea detectará automáticamente la categoría y la duración estándar de la hipótesis.
+          </p>
+          <div class="flex gap-2">
+            <input type="text" id="aiInputText" placeholder="Ej: 'Terminar de armar los slides y el plan de accion'" class="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+            <button onclick="processAiInput()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-indigo-100">
+              Procesar IA
+            </button>
+          </div>
+          <div id="aiFeedback" class="text-[10px] font-bold text-slate-400 mt-1 hidden"></div>
+        </div>
+      </div>
+
+      <!-- Panel de Gráficos e Hipótesis -->
+      <div class="lg:col-span-5 flex flex-col gap-6">
+        
+        <!-- Tarjeta Ocupabilidad Principal -->
+        <div class="bg-white rounded-3xl p-8 border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col gap-6 relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-48 h-48 bg-indigo-500/5 rounded-full blur-[80px] -mr-24 -mt-24"></div>
+          
+          <div class="flex items-center justify-between relative z-10">
+            <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Hipótesis de Carga Diaria</span>
+            <div id="saturationBadge" class="px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-full">
+              OPTIMIZADO
+            </div>
+          </div>
+
+          <!-- Medidor de porcentaje -->
+          <div class="flex items-center gap-6 py-4 relative z-10">
+            <div class="relative flex items-center justify-center shrink-0">
+              <!-- Radial Progress Mock -->
+              <svg class="w-24 h-24 transform -rotate-90">
+                <circle cx="48" cy="48" r="40" stroke="#F1F5F9" stroke-width="8" fill="transparent" />
+                <circle id="radialProgress" cx="48" cy="48" r="40" stroke="#4F46E5" stroke-width="8" fill="transparent"
+                  stroke-dasharray="251.2" stroke-dashoffset="50" stroke-linecap="round" class="transition-all duration-500" />
+              </svg>
+              <div class="absolute flex flex-col items-center">
+                <span id="percentageText" class="text-2xl font-black text-slate-800">80%</span>
+                <span class="text-[8px] font-black text-slate-400 uppercase tracking-widest">Ocupación</span>
+              </div>
+            </div>
+
+            <div class="flex-1 space-y-2">
+              <div class="flex justify-between items-baseline">
+                <span id="hoursUsedText" class="text-xl font-black text-slate-800">4.8h</span>
+                <span class="text-[10px] text-slate-400 font-bold uppercase">ocupadas de</span>
+                <span id="hoursAvailableText" class="text-base font-black text-slate-500">6.0h efectivas</span>
+              </div>
+              <p class="text-[10px] text-slate-400 font-medium leading-relaxed">
+                Esta es la ocupación inferida basada en tus tareas activas e inactivas de hoy.
+              </p>
+            </div>
+          </div>
+
+          <!-- Barra de Progreso Lineal -->
+          <div class="space-y-2">
+            <div class="flex justify-between text-[10px] font-black uppercase tracking-wider text-slate-400">
+              <span>Carga Planificada vs. Horas Efectivas</span>
+              <span id="linearPercentText">80%</span>
+            </div>
+            <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200/50">
+              <div id="linearProgress" class="h-full bg-indigo-600 rounded-full transition-all duration-500" style="width: 80%"></div>
+            </div>
+          </div>
+
+          <!-- Ritmo de Ejecución (Horario de Turno vs Tareas) -->
+          <div class="bg-indigo-50/50 border border-indigo-100/50 rounded-2xl p-4 space-y-3">
+            <div class="flex justify-between items-center">
+              <span class="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <i data-lucide="gauge" class="w-3.5 h-3.5 text-indigo-600"></i> Ritmo del Turno y Eficiencia
+              </span>
+              <span id="paceBadge" class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase">
+                AL DÍA
+              </span>
+            </div>
+            
+            <div class="space-y-2">
+              <div class="flex justify-between text-[10px] font-bold text-slate-500">
+                <span>Tiempo Transcurrido del Turno (9h total)</span>
+                <span id="shiftElapsedPercentText">33% (3.0h)</span>
+              </div>
+              <div class="w-full bg-slate-200/60 h-2 rounded-full overflow-hidden">
+                <div id="shiftElapsedProgress" class="h-full bg-slate-400 rounded-full transition-all duration-500" style="width: 33%"></div>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <div class="flex justify-between text-[10px] font-bold text-slate-500">
+                <span>Trabajo Efectivo Completado (Resuelto)</span>
+                <span id="resolvedPercentText">40% (2.4h)</span>
+              </div>
+              <div class="w-full bg-slate-200/60 h-2 rounded-full overflow-hidden">
+                <div id="resolvedProgress" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: 40%"></div>
+              </div>
+            </div>
+
+            <p id="paceHelperText" class="text-[9px] text-slate-400 leading-snug italic pt-1">
+              Estás a tiempo. Tu ritmo de resolución coincide con el progreso del turno.
+            </p>
+          </div>
+
+          <div class="border-t border-slate-100 pt-4 space-y-3">
+            <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Leyenda de Estados e Impacto</h4>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded bg-indigo-600"></span>
+                <span class="text-[10px] text-slate-500 font-bold">ABIERTO / PENDIENTE (100%)</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded bg-amber-400"></span>
+                <span class="text-[10px] text-slate-500 font-bold">EN ESPERA / BLOQUEADO (50%)</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded bg-emerald-500"></span>
+                <span class="text-[10px] text-slate-500 font-bold">RESUELTO (100% Carga)</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded bg-slate-300"></span>
+                <span class="text-[10px] text-slate-500 font-bold">DESPRIORIZADO (0% Carga)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Desglose por Actividades Planificadas -->
+        <div class="bg-white rounded-3xl p-8 border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col gap-4">
+          <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+            <h3 class="text-sm font-black font-outfit text-slate-800">Desglose Operacional por Tarea</h3>
+            <span id="activeTasksCount" class="px-2 py-0.5 bg-slate-100 rounded-full text-[9px] font-black text-slate-500">4 Tareas</span>
+          </div>
+          <div class="space-y-3" id="breakdownContainer">
+            <!-- Dinámico por JS -->
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Sección 3: Explicación de la Lógica sin play/pause -->
+    <section class="bg-gradient-to-tr from-[#0f004f] to-[#1b0088] text-white rounded-[32px] p-10 shadow-2xl relative overflow-hidden">
+      <div class="absolute top-0 right-0 w-80 h-80 bg-accent/10 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+      
+      <div class="relative z-10 flex flex-col md:flex-row gap-8 items-center">
+        <div class="md:w-2/3 space-y-6">
+          <div class="inline-flex items-center gap-2 px-3 py-1 bg-white/10 text-white rounded-full text-[10px] font-black uppercase tracking-widest">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-accent"></i> Filosofía del Diseño Atenea
+          </div>
+          <h3 class="text-2xl font-black font-outfit leading-tight">¿Por qué este modelo elimina el micro-monitoreo?</h3>
+          <p class="text-white/80 text-xs font-medium leading-relaxed">
+            Los operadores y coaches odian los temporizadores de play/pause porque generan estrés y no reflejan la multitarea o las interrupciones normales de un día de trabajo.
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div class="space-y-1">
+              <h4 class="text-xs font-bold text-accent uppercase tracking-wider">Inferencia Pasiva</h4>
+              <p class="text-[10px] text-white/60 leading-normal">
+                El sistema no requiere que el operador haga "click para empezar a trabajar". Estimamos la ocupabilidad de forma implícita midiendo el tiempo de vida de los estados en la agenda.
+              </p>
+            </div>
+            <div class="space-y-1">
+              <h4 class="text-xs font-bold text-accent uppercase tracking-wider">El "Liberador" de Carga</h4>
+              <p class="text-[10px] text-white/60 leading-normal">
+                Cuando una tarea pasa a <span class="font-bold text-white">"En Espera"</span>, asumimos que se bloqueó y liberamos el 50% de su carga para permitir que el operador realice tareas alternas.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="md:w-1/3 bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-md self-stretch flex flex-col justify-center gap-4">
+          <h4 class="text-xs font-black uppercase tracking-widest text-accent flex items-center gap-1"><i data-lucide="sparkles" class="w-4 h-4"></i> Hipótesis de estados</h4>
+          <div class="space-y-2">
+            <div class="flex justify-between items-center text-[10px] border-b border-white/5 pb-2">
+              <span class="text-white/60">Nuevo / Pendiente / Abierto</span>
+              <span class="font-bold">100% Carga</span>
+            </div>
+            <div class="flex justify-between items-center text-[10px] border-b border-white/5 pb-2">
+              <span class="text-white/60">En Espera (Bloqueado)</span>
+              <span class="font-bold text-amber-300">50% Carga</span>
+            </div>
+            <div class="flex justify-between items-center text-[10px] border-b border-white/5 pb-2">
+              <span class="text-white/60">Resuelto (Completada)</span>
+              <span class="font-bold text-emerald-300">100% Carga</span>
+            </div>
+            <div class="flex justify-between items-center text-[10px]">
+              <span class="text-white/60">Despriorizada / Fallido</span>
+              <span class="font-bold text-slate-400">0% Carga</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // Diccionario de actividades estándar
+    const STANDARDS = [
+      { id: 'radar', nombre: 'Revisión de indicadores RADAR', duracion: 60, keywords: ['radar', 'indicador', 'indicadores'], color: 'bg-radar' },
+      { id: 'hipotesis', nombre: 'Hipótesis: planteamiento + contexto operacional', duracion: 75, keywords: ['hipotesis', 'hipótesis', 'contexto operacional', 'contexto'], color: 'bg-hipotesis' },
+      { id: 'escuchas', nombre: 'Escuchas y validación de hipótesis', duracion: 165, keywords: ['escucha', 'escuchas', 'validación hipótesis'], color: 'bg-escuchas' },
+      { id: 'lcoach', nombre: 'Validación hipótesis en conjunto con LCoach', duracion: 60, keywords: ['lcoach', 'l coach', 'coach'], color: 'bg-lcoach' },
+      { id: 'analisis', nombre: 'Análisis con IA: descarga LEA + armado para análisis IA', duracion: 60, keywords: ['lea', 'ia', 'descarga lea', 'analisis ia'], color: 'bg-analisis' },
+      { id: 'slides', nombre: 'Armar slide y plan de acción para seguimiento', duracion: 60, keywords: ['slide', 'slides', 'plan de accion'], color: 'bg-slides' },
+      { id: 'focos', nombre: 'Seguimiento de focos', duracion: 60, keywords: ['foco', 'focos', 'seguimiento focos'], color: 'bg-focos' },
+    ];
+
+    // Escenarios pre-definidos
+    const SCENARIOS = {
+      balanced: [
+        { id: 1, actividad: 'Revisión de indicadores RADAR de la campaña de PE', estado: 'resuelto', prioridad: 7, antiguedad: 0 },
+        { id: 2, actividad: 'Escuchas de audio y validación hipótesis (165 min estándar)', estado: 'abierto', prioridad: 10, antiguedad: 0 },
+        { id: 3, actividad: 'Reunión semanal con LCoach para calibrar hipótesis', estado: 'pendiente', prioridad: 7, antiguedad: 1 },
+        { id: 4, actividad: 'Seguimiento de focos operacionales en plataforma', estado: 'pendiente', prioridad: 4, antiguedad: 3 },
+      ],
+      saturated: [
+        { id: 1, actividad: 'RADAR - Revisión de indicadores', estado: 'resuelto', prioridad: 7, antiguedad: 0 },
+        { id: 2, actividad: 'Hipótesis: planteamiento contexto operacional', estado: 'resuelto', prioridad: 10, antiguedad: 0 },
+        { id: 3, actividad: 'Escuchas de calibración (Audios PE y BR)', estado: 'abierto', prioridad: 10, antiguedad: 0 },
+        { id: 4, actividad: 'LCoach - Reunión conjunta', estado: 'pendiente', prioridad: 7, antiguedad: 1 },
+        { id: 5, actividad: 'Análisis con IA - Descarga de LEA', estado: 'pendiente', prioridad: 4, antiguedad: 2 },
+        { id: 6, actividad: 'Armar slide mensual y plan de acción', estado: 'pendiente', prioridad: 4, antiguedad: 1 },
+        { id: 7, actividad: 'Seguimiento de focos', estado: 'pendiente', prioridad: 4, antiguedad: 3 },
+      ],
+      light: [
+        { id: 1, actividad: 'Revisión de indicadores RADAR', estado: 'resuelto', prioridad: 7, antiguedad: 0 },
+        { id: 2, actividad: 'Descarga LEA + análisis IA rápido', estado: 'en espera', prioridad: 4, antiguedad: 1 },
+        { id: 3, actividad: 'Armar slide final y cierre plan', estado: 'pendiente', prioridad: 4, antiguedad: 0 }
+      ]
+    };
+
+    let activeTasks = [];
+    let agentSeniority = 'intermedio';
+    let shiftElapsedMinutes = 180; // 3.0h transcurridas por defecto
+
+    // Cargar un escenario
+    function loadScenario(key) {
+      activeTasks = JSON.parse(JSON.stringify(SCENARIOS[key] || SCENARIOS.balanced));
+      renderTasks();
+      calculateOccupancy();
+    }
+
+    function updateSeniority(val) {
+      agentSeniority = val;
+      renderTasks();
+      calculateOccupancy();
+    }
+
+    function updateShiftProgress(val) {
+      shiftElapsedMinutes = parseInt(val);
+      const hours = (shiftElapsedMinutes / 60).toFixed(1);
+      document.getElementById('elapsedTimeBadge').innerText = `${hours}h transcurridas`;
+      calculateOccupancy();
+    }
+
+    // Buscar si calza con alguna actividad estándar
+    function matchStandard(actividadText) {
+      const text = actividadText.toLowerCase();
+      // Búsqueda por coincidencia de nombre
+      for (const std of STANDARDS) {
+        if (text.includes(std.nombre.toLowerCase())) return std;
+      }
+      // Búsqueda por palabras clave
+      for (const std of STANDARDS) {
+        for (const kw of std.keywords) {
+          if (text.includes(kw)) return std;
+        }
+      }
+      return null;
+    }
+
+    // Obtener minutos de una tarea (aplicando multiplicador de antigüedad del agente)
+    function getTaskMinutes(task) {
+      const std = matchStandard(task.actividad);
+      let baseMins = 60;
+      if (std) {
+        baseMins = std.duracion;
+      } else {
+        // Fallback por prioridad
+        const priorityWeights = { 10: 120, 7: 90, 4: 60, 2: 30 };
+        baseMins = priorityWeights[task.prioridad] || 60;
+      }
+      
+      // Multiplicador de antigüedad/tenure
+      const mult = agentSeniority === 'junior' ? 1.3 : (agentSeniority === 'senior' ? 0.8 : 1.0);
+      return Math.round(baseMins * mult);
+    }
+
+    // Cambiar estado de una tarea
+    function setTaskState(taskId, newState) {
+      const task = activeTasks.find(t => t.id === taskId);
+      if (task) {
+        task.estado = newState;
+        renderTasks();
+        calculateOccupancy();
+      }
+    }
+
+    // Eliminar tarea
+    function deleteTask(taskId) {
+      activeTasks = activeTasks.filter(t => t.id !== taskId);
+      renderTasks();
+      calculateOccupancy();
+    }
+
+    // Procesar la entrada de IA
+    function processAiInput() {
+      const input = document.getElementById('aiInputText');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const std = matchStandard(text);
+      const priority = std ? (std.id === 'escuchas' || std.id === 'radar' ? 10 : 7) : 4;
+      const minutes = std ? std.duracion : 60;
+
+      const newTask = {
+        id: Date.now(),
+        actividad: text,
+        estado: 'pendiente',
+        prioridad: priority,
+        antiguedad: 0
+      };
+
+      activeTasks.push(newTask);
+      renderTasks();
+      calculateOccupancy();
+
+      const feedback = document.getElementById('aiFeedback');
+      feedback.classList.remove('hidden');
+      if (std) {
+        feedback.innerHTML = `<span class="text-emerald-500">✨ Atenea detectó: "${std.nombre}" (Duración: ${std.duracion} min). Agregada al plan.</span>`;
+      } else {
+        feedback.innerHTML = `<span class="text-amber-500">ℹ️ Tarea personalizada detectada. Estimación sugerida por prioridad: 60 min. Agregada al plan.</span>`;
+      }
+
+      input.value = '';
+      setTimeout(() => feedback.classList.add('hidden'), 5000);
+    }
+
+    // Calcular ocupabilidad
+    function calculateOccupancy() {
+      const availableHours = 6.0; // 6 horas efectivas
+      const availableMins = availableHours * 60;
+      
+      let plannedMins = 0;
+      let occupiedMins = 0;
+
+      activeTasks.forEach(t => {
+        const mins = getTaskMinutes(t);
+        const state = t.estado.toLowerCase();
+
+        // Planificadas
+        if (state !== 'despriorizado') {
+          plannedMins += mins;
+        }
+
+        // Ocupación Inferred
+        if (state === 'abierto' || state === 'pendiente') {
+          occupiedMins += mins; // Carga completa
+        } else if (state === 'en espera') {
+          occupiedMins += mins * 0.5; // 50% de la carga liberada
+        } else if (state === 'resuelto') {
+          occupiedMins += mins; // 100% ocupada ya realizada
+        }
+      });
+
+      const percentage = availableMins > 0 ? Math.round((occupiedMins / availableMins) * 100) : 0;
+      const hoursUsed = (occupiedMins / 60).toFixed(1);
+
+      // Renderizar valores en tarjeta de Ocupabilidad
+      document.getElementById('percentageText').innerText = `${percentage}%`;
+      document.getElementById('linearPercentText').innerText = `${percentage}%`;
+      document.getElementById('hoursUsedText').innerText = `${hoursUsed}h`;
+      document.getElementById('linearProgress').style.width = `${Math.min(percentage, 100)}%`;
+
+      // Actualizar círculo de progreso radial
+      const circle = document.getElementById('radialProgress');
+      const radius = circle.r.baseVal.value;
+      const circumference = 2 * Math.PI * radius; // 251.2
+      const offset = circumference - (Math.min(percentage, 100) / 100) * circumference;
+      circle.style.strokeDashoffset = offset;
+
+      // Color de barra según saturación
+      const progressBg = document.getElementById('linearProgress');
+      if (percentage > 100) {
+        progressBg.className = 'h-full bg-red-600 rounded-full transition-all duration-500';
+        circle.setAttribute('stroke', '#EF4444');
+      } else if (percentage >= 80) {
+        progressBg.className = 'h-full bg-amber-500 rounded-full transition-all duration-500';
+        circle.setAttribute('stroke', '#F59E0B');
+      } else {
+        progressBg.className = 'h-full bg-emerald-500 rounded-full transition-all duration-500';
+        circle.setAttribute('stroke', '#10B981');
+      }
+
+      // Badge de Saturación
+      const badge = document.getElementById('saturationBadge');
+      if (percentage > 100) {
+        badge.innerText = 'SATURADO';
+        badge.className = 'px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-full bg-red-100 text-red-700 border border-red-200 animate-pulse';
+      } else if (percentage >= 80) {
+        badge.innerText = 'CARGA ÓPTIMA';
+        badge.className = 'px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-full bg-amber-100 text-amber-700 border border-amber-200';
+      } else {
+        badge.innerText = 'SUBUTILIZADO';
+        badge.className = 'px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200';
+      }
+
+      // --- CÁLCULO DE RITMO Y EFICIENCIA ---
+      let resolvedMins = 0;
+      activeTasks.forEach(t => {
+        if (t.estado.toLowerCase() === 'resuelto') {
+          resolvedMins += getTaskMinutes(t);
+        }
+      });
+
+      const shiftTotalMins = 540; // 9 horas de turno
+      const shiftPercent = Math.round((shiftElapsedMinutes / shiftTotalMins) * 100);
+      const shiftHoursText = (shiftElapsedMinutes / 60).toFixed(1);
+      
+      const resolvedPercent = plannedMins > 0 ? Math.round((resolvedMins / plannedMins) * 100) : 0;
+      const resolvedHoursText = (resolvedMins / 60).toFixed(1);
+
+      document.getElementById('shiftElapsedPercentText').innerText = `${shiftPercent}% (${shiftHoursText}h)`;
+      document.getElementById('shiftElapsedProgress').style.width = `${shiftPercent}%`;
+
+      document.getElementById('resolvedPercentText').innerText = `${resolvedPercent}% (${resolvedHoursText}h)`;
+      document.getElementById('resolvedProgress').style.width = `${resolvedPercent}%`;
+
+      const paceBadge = document.getElementById('paceBadge');
+      const paceHelperText = document.getElementById('paceHelperText');
+      
+      if (shiftElapsedMinutes === 0) {
+        paceBadge.innerText = 'INICIANDO TURNO';
+        paceBadge.className = 'px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-slate-100 text-slate-500 border border-slate-200';
+        paceHelperText.innerText = 'El turno acaba de comenzar. Registra tus avances para iniciar la medición.';
+      } else {
+        // Tasa esperada de avance basada en el progreso del turno
+        const expectedResolvedMins = (shiftElapsedMinutes / shiftTotalMins) * plannedMins;
+        
+        if (resolvedMins >= expectedResolvedMins * 1.1) {
+          paceBadge.innerText = 'ADELANTADO';
+          paceBadge.className = 'px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-100 text-emerald-700 border border-emerald-200';
+          paceHelperText.innerText = '¡Excelente ritmo! Has completado más trabajo de lo proyectado para este momento del turno.';
+        } else if (resolvedMins < expectedResolvedMins * 0.8) {
+          paceBadge.innerText = 'ATRASADO';
+          paceBadge.className = 'px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 animate-pulse';
+          paceHelperText.innerText = 'Alerta de ritmo. Has completado menos tareas del progreso proyectado del turno.';
+        } else {
+          paceBadge.innerText = 'AL DÍA';
+          paceBadge.className = 'px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-indigo-100 text-indigo-700 border border-indigo-200';
+          paceHelperText.innerText = 'Buen ritmo. Tu resolución de tareas va a la par con el progreso de tu jornada.';
+        }
+      }
+
+      // Actualizar contador
+      document.getElementById('activeTasksCount').innerText = `${activeTasks.length} Tareas`;
+
+      // Renderizar desglose
+      renderBreakdown();
+    }
+
+    // Renderizar lista de tareas
+    function renderTasks() {
+      const container = document.getElementById('tasksContainer');
+      container.innerHTML = '';
+
+      if (activeTasks.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-10 text-slate-400">
+            <i data-lucide="list-todo" class="w-12 h-12 mx-auto mb-2 stroke-1 opacity-50"></i>
+            <p class="text-xs font-bold uppercase tracking-widest">Sin tareas en el plan</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      activeTasks.forEach(t => {
+        const std = matchStandard(t.actividad);
+        const mins = getTaskMinutes(t);
+        const hours = (mins / 60).toFixed(2);
+        
+        let stateBadgeClass = '';
+        let rowClass = 'border border-slate-100 hover:border-slate-200';
+        
+        if (t.estado === 'resuelto') {
+          stateBadgeClass = 'bg-emerald-100 text-emerald-700';
+          rowClass = 'border border-emerald-100 bg-emerald-50/10 opacity-75';
+        } else if (t.estado === 'abierto') {
+          stateBadgeClass = 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-500/20';
+          rowClass = 'border-2 border-indigo-500 bg-indigo-50/5';
+        } else if (t.estado === 'en espera') {
+          stateBadgeClass = 'bg-amber-100 text-amber-700';
+          rowClass = 'border border-amber-100 bg-amber-50/10';
+        } else if (t.estado === 'despriorizado') {
+          stateBadgeClass = 'bg-slate-100 text-slate-400';
+          rowClass = 'border border-slate-100 bg-slate-50/30 opacity-50';
+        } else {
+          stateBadgeClass = 'bg-slate-100 text-slate-600';
+        }
+
+        const div = document.createElement('div');
+        div.className = `p-4 rounded-2xl transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${rowClass}`;
+        
+        let ageBadge = '';
+        const taskAge = t.antiguedad || 0;
+        if (taskAge === 1) {
+          ageBadge = `<span class="text-[9px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1"><i data-lucide="corner-down-right" class="w-2.5 h-2.5"></i> Anterior Turno</span>`;
+        } else if (taskAge > 1) {
+          ageBadge = `<span class="text-[9px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200 flex items-center gap-1 animate-pulse"><i data-lucide="alert-triangle" class="w-2.5 h-2.5"></i> Hace ${taskAge} Turnos</span>`;
+        } else {
+          ageBadge = `<span class="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1"><i data-lucide="calendar-plus" class="w-2.5 h-2.5"></i> Hoy</span>`;
+        }
+
+        div.innerHTML = `
+          <div class="flex items-start gap-3 flex-1">
+            <div class="mt-1 shrink-0 ${std ? 'text-indigo-500' : 'text-slate-400'}">
+              <i data-lucide="${std ? 'check-circle' : 'circle'}" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h4 class="text-xs font-bold text-slate-800 leading-snug">${t.actividad}</h4>
+              <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+                ${std ? `<span class="text-[9px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">${std.id.toUpperCase()}</span>` : `<span class="text-[9px] font-black uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">CUSTOM</span>`}
+                <span class="text-[10px] text-slate-400 font-bold flex items-center gap-1"><i data-lucide="clock" class="w-3 h-3"></i> ${mins} min (${parseFloat(hours)}h)</span>
+                ${ageBadge}
+              </div>
+            </div>
+          </div>
+
+          <!-- Selector de Estados -->
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="text-[9px] font-black px-2 py-1 rounded-full uppercase ${stateBadgeClass}">${t.estado}</span>
+            <div class="h-6 w-px bg-slate-100"></div>
+            
+            <button onclick="setTaskState(${t.id}, 'abierto')" title="Activar / Poner Abierto" class="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-slate-400 transition-colors">
+              <i data-lucide="play" class="w-4 h-4"></i>
+            </button>
+            <button onclick="setTaskState(${t.id}, 'en espera')" title="Poner en Espera (Libera 50% de la carga)" class="p-1.5 hover:bg-amber-50 hover:text-amber-600 rounded-lg text-slate-400 transition-colors">
+              <i data-lucide="pause" class="w-4 h-4"></i>
+            </button>
+            <button onclick="setTaskState(${t.id}, 'resuelto')" title="Marcar Resuelto" class="p-1.5 hover:bg-emerald-50 hover:text-emerald-600 rounded-lg text-slate-400 transition-colors">
+              <i data-lucide="check" class="w-4 h-4"></i>
+            </button>
+            <button onclick="setTaskState(${t.id}, 'despriorizado')" title="Despriorizar (0% de carga)" class="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg text-slate-400 transition-colors">
+              <i data-lucide="x-circle" class="w-4 h-4"></i>
+            </button>
+            <button onclick="deleteTask(${t.id})" title="Eliminar" class="p-1.5 hover:bg-red-50 hover:text-red-600 rounded-lg text-slate-400 transition-colors ml-2">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        `;
+        
+        container.appendChild(div);
+      });
+
+      lucide.createIcons();
+    }
+
+    // Renderizar el desglose
+    function renderBreakdown() {
+      const container = document.getElementById('breakdownContainer');
+      container.innerHTML = '';
+
+      if (activeTasks.length === 0) {
+        container.innerHTML = '<p class="text-[10px] text-slate-400 font-bold uppercase py-2">No hay desglose disponible</p>';
+        return;
+      }
+
+      // Agrupar minutos por categoría estándar
+      const breakdown = {};
+      STANDARDS.forEach(std => {
+        breakdown[std.id] = { standard: std, minutes: 0, activeCount: 0 };
+      });
+      breakdown['custom'] = { standard: { nombre: 'Otras actividades', color: 'bg-slate-500' }, minutes: 0, activeCount: 0 };
+
+      activeTasks.forEach(t => {
+        const std = matchStandard(t.actividad);
+        const mins = getTaskMinutes(t);
+        const categoryKey = std ? std.id : 'custom';
+
+        if (t.estado !== 'despriorizado') {
+          breakdown[categoryKey].minutes += mins;
+          breakdown[categoryKey].activeCount += 1;
+        }
+      });
+
+      Object.values(breakdown).forEach(item => {
+        if (item.activeCount > 0) {
+          const colorClass = item.standard.color;
+          const label = item.standard.nombre;
+          const mins = item.minutes;
+          const hours = (mins / 60).toFixed(1);
+
+          const div = document.createElement('div');
+          div.className = "space-y-1.5";
+          div.innerHTML = `
+            <div class="flex justify-between items-center text-[10px]">
+              <span class="font-bold text-slate-600 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full ${colorClass}"></span>
+                ${label}
+              </span>
+              <span class="font-black text-slate-700">${mins}m (${hours}h)</span>
+            </div>
+            <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+              <div class="h-full ${colorClass} rounded-full" style="width: ${Math.min((mins / 360) * 100, 100)}%"></div>
+            </div>
+          `;
+          container.appendChild(div);
+        }
+      });
+    }
+
+    // Inicialización
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById('shiftSlider').value = 180;
+      loadScenario('balanced');
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
