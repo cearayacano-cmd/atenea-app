@@ -233,9 +233,7 @@ if (!columns.includes("antiguedad")) {
   db.exec("ALTER TABLE Tareas ADD COLUMN antiguedad INTEGER DEFAULT 0");
 }
 
-const backlogInfo = db.prepare("PRAGMA table_info(Backlog)").all();
-const backlogCols = backlogInfo.map((c: any) => c.name);
-if (!backlogCols.includes("antiguedad")) {
+if (!backlogColumns.includes("antiguedad")) {
   db.exec("ALTER TABLE Backlog ADD COLUMN antiguedad INTEGER DEFAULT 0");
 }
 
@@ -1225,8 +1223,9 @@ async function startServer() {
 REGLA MUY IMPORTANTE: NO dividas ni desgloses el texto en múltiples tareas. Devuelve SIEMPRE 1 sola actividad (a menos que haya viñetas claras).
 
 TU OBJETIVO PRINCIPAL:
-1. Mejora la redacción del texto libre y guárdalo en la propiedad "actividad" tal como el usuario lo pidió (NO lo reemplaces por el título del catálogo).
-2. Evalúa las palabras del usuario e intenta encontrar su mayor similitud lógica con el siguiente CATÁLOGO OFICIAL (basado en el Modelo de Calidad Customer Care de 12 pasos):
+1. REGLA DE ORO DE LA ACTIVIDAD: La propiedad "actividad" del JSON resultante debe ser EXACTAMENTE el texto original ingresado por el usuario (solo se permite corregir de forma mínima la ortografía de palabras si es necesario). NUNCA reescribas la actividad, no la resumas, no la generalices, y bajo ningún concepto la reemplaces por los títulos o nombres del catálogo oficial. Debe conservarse el texto exacto tal como lo escribió el usuario.
+2. Evalúa las palabras del usuario para encontrar su similitud lógica con el siguiente CATÁLOGO OFICIAL (basado en el Modelo de Calidad Customer Care de 12 pasos) para fines de metadata.
+3. El catálogo oficial sirve ÚNICAMENTE para extraer y asignar "complejidad", "tiempo_estimado" y "rol_ejecutante" según la similitud lógica. Si no hay similitud, asume complejidad 2, tiempo 60 y rol "Calidad Fabrica". NUNCA uses los nombres del catálogo en la propiedad "actividad".
 
 [CATÁLOGO - Calidad Fabrica]
 - "Paso 1-4: Revisión de indicadores Radar / Foco" (complejidad: 1, tiempo: 60)
@@ -1244,7 +1243,6 @@ TU OBJETIVO PRINCIPAL:
 - "Revisión levantamientos Operación" (complejidad: 1, tiempo: 30)
 - "Calibraciones" (complejidad: 1, tiempo: 60)
 
-3. Con base en esa similitud, extrae en secreto y asigna automáticamente "complejidad", "tiempo_estimado" y "rol_ejecutante" según el catálogo. Si no hay similitud, asume complejidad 2, tiempo 60 y rol "Calidad Fabrica".
 4. REGLA DE ARRASTRE: Si en el texto el usuario menciona que es una tarea "retrasada", "pendiente de ayer", o que lleva días "arrastrándose", DEBES sumar obligatoriamente +1 al nivel de complejidad original y si la complejidad final es >=3, sugiere dividir la tarea.
 5. Asigna una "prioridad" lógica (7 alta, 4 media, 2 baja). REGLA CRÍTICA: Si la complejidad asignada es 1, la prioridad NO puede ser alta (7).
 6. Asigna el "area" más lógica ("Operativo", "Monitoreo", "Tendencias", "Escuelita", "Calidad").
