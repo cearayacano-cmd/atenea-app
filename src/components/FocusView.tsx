@@ -252,6 +252,27 @@ export default function FocusView({ selectedDate }: { selectedDate: string }) {
     }
   };
 
+  const dragFocus = async () => {
+    if (!activeTask) return;
+    setIsSaving(true);
+    try {
+      await fetch(`/api/tareas/${activeTask.id}/arrastrar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hallazgos: findings })
+      });
+
+      setIsCompleteModalOpen(false);
+      setFindings('');
+      setEvidence('');
+      await fetchData();
+    } catch (err) {
+      console.error('Error dragging focus task:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const failFocus = async () => {
     if (!activeTask) return;
     setIsSaving(true);
@@ -643,6 +664,13 @@ export default function FocusView({ selectedDate }: { selectedDate: string }) {
                 className="px-5 py-3 text-slate-400 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
               >
                 Cancelar
+              </button>
+              <button 
+                onClick={dragFocus}
+                disabled={isSaving}
+                className="px-5 py-3 bg-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-amber-600 transition-all shadow-lg"
+              >
+                {isSaving ? 'Guardando...' : 'Incompleta / Arrastrar'}
               </button>
               <button 
                 onClick={completeFocus}

@@ -209,7 +209,7 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
 
       if (!closureRes.ok) throw new Error('Error al cerrar el plan diario');
 
-      if (onNavigate) onNavigate('dashboard');
+      if (onNavigate) onNavigate('dashboard2');
     } catch (error) {
       console.error('Error al finalizar el día:', error);
       setErrorCierre(error instanceof Error ? error.message : 'Hubo un error al guardar los datos. Por favor, inténtalo de nuevo.');

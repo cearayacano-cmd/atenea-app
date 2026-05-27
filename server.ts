@@ -29,7 +29,8 @@ db.exec(`
     es_ajuste_manual INTEGER DEFAULT 0,
     estado_cierre INTEGER DEFAULT 0,
     ejecucion_iniciada INTEGER DEFAULT 0,
-    hora_inicio_ejecucion TEXT
+    hora_inicio_ejecucion TEXT,
+    justificacion_reapertura TEXT
   );
 
   CREATE TABLE IF NOT EXISTS Tareas (
@@ -49,7 +50,8 @@ db.exec(`
     backlog_id INTEGER,
     evidencia TEXT,
     area TEXT,
-    tiempo_invertido_minutos INTEGER DEFAULT 0
+    tiempo_invertido_minutos INTEGER DEFAULT 0,
+    antiguedad INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS Incidencias (
@@ -77,7 +79,8 @@ db.exec(`
     prioridad INTEGER DEFAULT 4,
     status TEXT DEFAULT 'nuevo',
     area TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    antiguedad INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS LogsTareas (
@@ -204,14 +207,18 @@ if (!columns.includes("complejidad")) {
   db.exec("ALTER TABLE Tareas ADD COLUMN complejidad INTEGER DEFAULT 2");
 }
 
-// Asegurar que exista el supervisor
-db.prepare("INSERT OR IGNORE INTO Usuarios (email, nombre, initials, role) VALUES (?, ?, ?, ?)").run('carlose.araya@latam.com', 'Carlos E. Araya', 'CA', 'supervisor');
+// Asegurar que existan los usuarios solicitados
+const stmtInitUser = db.prepare("INSERT OR IGNORE INTO Usuarios (email, nombre, initials, role, rol_ejecutante) VALUES (?, ?, ?, ?, ?)");
+stmtInitUser.run('carlose.araya@latam.com', 'Carlos E. Araya', 'CA', 'supervisor', 'Calidad Fabrica');
 db.prepare("UPDATE Usuarios SET role = 'supervisor' WHERE email = 'carlose.araya@latam.com'").run();
 
-// Asegurar que existan los operadores por defecto para las pruebas de roles
-db.prepare("INSERT OR IGNORE INTO Usuarios (email, nombre, initials, role, rol_ejecutante) VALUES (?, ?, ?, ?, ?)").run('calidadlatam01@latam.com', 'Calidad LATAM 01', 'LA', 'operador', 'Calidad LATAM');
-db.prepare("INSERT OR IGNORE INTO Usuarios (email, nombre, initials, role, rol_ejecutante) VALUES (?, ?, ?, ?, ?)").run('calidadlatam02@latam.com', 'Calidad LATAM 02', 'LA', 'operador', 'Calidad LATAM');
-db.prepare("INSERT OR IGNORE INTO Usuarios (email, nombre, initials, role, rol_ejecutante) VALUES (?, ?, ?, ?, ?)").run('calidadpe01@latam.com', 'Calidad PE 01', 'PE', 'operador', 'Calidad Fabrica');
+stmtInitUser.run('FABcalidad01@latam.com', 'FAB Calidad 01', 'F1', 'operador', 'Calidad Fabrica');
+stmtInitUser.run('FABcalidad02@latam.com', 'FAB Calidad 02', 'F2', 'operador', 'Calidad Fabrica');
+stmtInitUser.run('FABcalidad03@latam.com', 'FAB Calidad 03', 'F3', 'operador', 'Calidad Fabrica');
+
+stmtInitUser.run('LATAMcalidad01@latam.com', 'LATAM Calidad 01', 'L1', 'operador', 'Calidad LATAM');
+stmtInitUser.run('LATAMcalidad02@latam.com', 'LATAM Calidad 02', 'L2', 'operador', 'Calidad LATAM');
+stmtInitUser.run('LATAMcalidad03@latam.com', 'LATAM Calidad 03', 'L3', 'operador', 'Calidad LATAM');
 
 if (!columns.includes("estado_ejecucion")) {
   db.exec("ALTER TABLE Tareas ADD COLUMN estado_ejecucion TEXT DEFAULT NULL");
@@ -221,6 +228,15 @@ if (!columns.includes("evidencia")) {
 }
 if (!columns.includes("tiempo_invertido_minutos")) {
   db.exec("ALTER TABLE Tareas ADD COLUMN tiempo_invertido_minutos INTEGER DEFAULT 0");
+}
+if (!columns.includes("antiguedad")) {
+  db.exec("ALTER TABLE Tareas ADD COLUMN antiguedad INTEGER DEFAULT 0");
+}
+
+const backlogInfo = db.prepare("PRAGMA table_info(Backlog)").all();
+const backlogCols = backlogInfo.map((c: any) => c.name);
+if (!backlogCols.includes("antiguedad")) {
+  db.exec("ALTER TABLE Backlog ADD COLUMN antiguedad INTEGER DEFAULT 0");
 }
 
 const planInfo = db.prepare("PRAGMA table_info(PlanesDiarios)").all();
@@ -236,6 +252,9 @@ if (!planColumns.includes("hora_inicio_ejecucion")) {
 }
 if (!planColumns.includes("user_id")) {
   db.exec("ALTER TABLE PlanesDiarios ADD COLUMN user_id INTEGER DEFAULT 1");
+}
+if (!planColumns.includes("justificacion_reapertura")) {
+  db.exec("ALTER TABLE PlanesDiarios ADD COLUMN justificacion_reapertura TEXT");
 }
 
 const bloquesInfo = db.prepare("PRAGMA table_info(BloquesNoDisponibles)").all();
@@ -453,6 +472,15 @@ async function startServer() {
     
     const usersToAssign = (assignedUsers && assignedUsers.length > 0) ? assignedUsers : [userId || 1];
     
+    if (Number(prioridad) === 10) {
+      if (usersToAssign.includes(uid)) {
+        const existing = db.prepare("SELECT id FROM Tareas WHERE fecha = ? AND user_id = ? AND prioridad = 10 AND LOWER(COALESCE(estado_ejecucion, 'nuevo')) IN ('nuevo', 'abierto', 'progreso', 'en progreso')").get(fecha, uid);
+        if (existing) {
+          return res.status(400).json({ error: "Límite superado: solo se permite una tarea crítica por día para tu usuario." });
+        }
+      }
+    }
+    
     let backlogCreatedAt: string | null = null;
     if (backlog_id) {
       const bg = db.prepare("SELECT created_at FROM Backlog WHERE id = ?").get(backlog_id) as { created_at: string } | undefined;
@@ -465,13 +493,18 @@ async function startServer() {
     const finalAssignedAt = nowStr;
 
     db.transaction(() => {
+      let currentBacklogId = backlog_id;
+      if (!currentBacklogId) {
+        const bgRes = db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area, created_at) VALUES (?, ?, ?, ?, ?)").run(actividad, prioridad, 'progreso', area || 'Operativo', finalCreatedAt);
+        currentBacklogId = bgRes.lastInsertRowid;
+      } else {
+        db.prepare("UPDATE Backlog SET status = 'progreso' WHERE id = ?").run(currentBacklogId);
+      }
+
       const stmt = db.prepare("INSERT INTO Tareas (fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area, user_id, complejidad, created_at, assigned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
       for(const uid of usersToAssign) {
         const valTiempo = (tiempo_asignado_minutos !== undefined && tiempo_asignado_minutos !== null) ? tiempo_asignado_minutos : null;
-        stmt.run(fecha, actividad, prioridad, valTiempo, fecha_origen_remanente || null, backlog_id || null, estado_ejecucion || null, evidencia || null, area || null, uid, complejidad || 2, finalCreatedAt, finalAssignedAt);
-      }
-      if (backlog_id) {
-        db.prepare("UPDATE Backlog SET status = 'progreso' WHERE id = ?").run(backlog_id);
+        stmt.run(fecha, actividad, prioridad, valTiempo, fecha_origen_remanente || null, currentBacklogId, estado_ejecucion || null, evidencia || null, area || null, uid, complejidad || 2, finalCreatedAt, finalAssignedAt);
       }
     })();
     res.json({ success: true });
@@ -582,6 +615,35 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.post("/api/tareas/:id/arrastrar", (req, res) => {
+    const { id } = req.params;
+    const { hallazgos } = req.body;
+    db.transaction(() => {
+      const task = db.prepare("SELECT * FROM Tareas WHERE id = ?").get(id) as any;
+      if (!task) return;
+      
+      // Update task in Tareas to be 'arrastrada'
+      db.prepare(`
+        UPDATE Tareas 
+        SET estado_ejecucion = 'arrastrada', 
+            antiguedad = antiguedad + 1,
+            hallazgos = ?
+        WHERE id = ?
+      `).run(hallazgos || '', id);
+
+      // If it has a backlog reference, return it to backlog and update its antiguedad
+      if (task.backlog_id) {
+        db.prepare(`
+          UPDATE Backlog 
+          SET status = 'pendiente',
+              antiguedad = antiguedad + 1
+          WHERE id = ?
+        `).run(task.backlog_id);
+      }
+    })();
+    res.json({ success: true });
+  });
+
   app.delete("/api/tareas/:id", (req, res) => {
     const { id } = req.params;
     db.transaction(() => {
@@ -596,7 +658,7 @@ async function startServer() {
 
   // Internal endpoint for daily plan adjustments (to support the "inheritance" requirement)
   app.post("/api/plan-diario", (req, res) => {
-    const { date, hora_inicio, hora_fin, horas_efectivas, estado_cierre } = req.body;
+    const { date, hora_inicio, hora_fin, horas_efectivas, estado_cierre, justificacion_reapertura } = req.body;
 
     // Get existing plan to preserve values if not provided
     const existing = db.prepare("SELECT * FROM PlanesDiarios WHERE date = ?").get(date);
@@ -605,16 +667,18 @@ async function startServer() {
     const h_fin = hora_fin !== undefined ? hora_fin : (existing?.hora_fin || '17:00');
     const h_efectivas = horas_efectivas !== undefined ? horas_efectivas : (existing?.horas_efectivas || 6.0);
     const e_cierre = estado_cierre !== undefined ? (estado_cierre ? 1 : 0) : (existing?.estado_cierre || 0);
+    const j_reapertura = justificacion_reapertura !== undefined ? justificacion_reapertura : (existing?.justificacion_reapertura || null);
 
     db.prepare(`
-      INSERT INTO PlanesDiarios (date, hora_inicio, hora_fin, horas_efectivas, estado_cierre)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO PlanesDiarios (date, hora_inicio, hora_fin, horas_efectivas, estado_cierre, justificacion_reapertura)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(date) DO UPDATE SET
         hora_inicio = excluded.hora_inicio,
         hora_fin = excluded.hora_fin,
         horas_efectivas = excluded.horas_efectivas,
-        estado_cierre = excluded.estado_cierre
-    `).run(date, h_inicio, h_fin, h_efectivas, e_cierre);
+        estado_cierre = excluded.estado_cierre,
+        justificacion_reapertura = excluded.justificacion_reapertura
+    `).run(date, h_inicio, h_fin, h_efectivas, e_cierre, j_reapertura);
 
     // Backlog Sync on closure
     if (e_cierre === 1) {
@@ -654,9 +718,13 @@ async function startServer() {
 
   // 3. Incidencias
   app.get("/api/incidencias", (req, res) => {
-    const { fecha } = req.query;
+    const { fecha, fechaInicio, fechaFin } = req.query;
     const userId = parseInt(req.query.userId as string) || 1;
-    if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
+    if (fechaInicio && fechaFin) {
+      const incidents = db.prepare("SELECT * FROM Incidencias WHERE fecha >= ? AND fecha <= ? AND user_id = ?").all(fechaInicio, fechaFin, userId);
+      return res.json(incidents);
+    }
+    if (!fecha) return res.status(400).json({ error: "Fecha o rango de fechas requerido" });
     const incidents = db.prepare("SELECT * FROM Incidencias WHERE fecha = ? AND user_id = ?").all(fecha, userId);
     res.json(incidents);
   });
@@ -1061,17 +1129,13 @@ async function startServer() {
     db.transaction(() => {
       // 0. Usuarios Mock
       const stmtUser = db.prepare("INSERT OR IGNORE INTO Usuarios (nombre, email, initials, role, rol_ejecutante) VALUES (?, ?, ?, ?, ?)");
-      const users = [];
-      users.push(['Calidad LATAM 01', 'calidadlatam01@latam.com', 'LA', 'operador', 'Calidad LATAM']);
-      users.push(['Calidad LATAM 02', 'calidadlatam02@latam.com', 'LA', 'operador', 'Calidad LATAM']);
-      for(let i=1; i<=5; i++) {
-        const num = i.toString().padStart(2, '0');
-        // Alternar rol ejecutante
-        users.push([`Calidad PE ${num}`, `Calidadpe${num}@latam.com`, `PE`, 'operador', i % 2 === 0 ? 'Calidad LATAM' : 'Calidad Fabrica']);
-        users.push([`Calidad BR ${num}`, `Calidadbr${num}@latam.com`, `BR`, 'operador', i % 2 === 0 ? 'Calidad Fabrica' : 'Calidad LATAM']);
-        users.push([`Calidad CO ${num}`, `Calidadco${num}@latam.com`, `CO`, 'operador', i % 3 === 0 ? 'Calidad LATAM' : 'Calidad Fabrica']);
-      }
-      users.forEach(u => stmtUser.run(...u));
+      stmtUser.run('Carlos E. Araya', 'carlose.araya@latam.com', 'CA', 'supervisor', 'Calidad Fabrica');
+      stmtUser.run('FAB Calidad 01', 'FABcalidad01@latam.com', 'F1', 'operador', 'Calidad Fabrica');
+      stmtUser.run('FAB Calidad 02', 'FABcalidad02@latam.com', 'F2', 'operador', 'Calidad Fabrica');
+      stmtUser.run('FAB Calidad 03', 'FABcalidad03@latam.com', 'F3', 'operador', 'Calidad Fabrica');
+      stmtUser.run('LATAM Calidad 01', 'LATAMcalidad01@latam.com', 'L1', 'operador', 'Calidad LATAM');
+      stmtUser.run('LATAM Calidad 02', 'LATAMcalidad02@latam.com', 'L2', 'operador', 'Calidad LATAM');
+      stmtUser.run('LATAM Calidad 03', 'LATAMcalidad03@latam.com', 'L3', 'operador', 'Calidad LATAM');
 
       // 1. Backlog
       const backlogItems = [
@@ -1162,16 +1226,16 @@ REGLA MUY IMPORTANTE: NO dividas ni desgloses el texto en múltiples tareas. Dev
 
 TU OBJETIVO PRINCIPAL:
 1. Mejora la redacción del texto libre y guárdalo en la propiedad "actividad" tal como el usuario lo pidió (NO lo reemplaces por el título del catálogo).
-2. Evalúa las palabras del usuario e intenta encontrar su mayor similitud lógica con el siguiente CATÁLOGO OFICIAL:
+2. Evalúa las palabras del usuario e intenta encontrar su mayor similitud lógica con el siguiente CATÁLOGO OFICIAL (basado en el Modelo de Calidad Customer Care de 12 pasos):
 
 [CATÁLOGO - Calidad Fabrica]
-- "Revisión de indicadores entregados por RADAR" (complejidad: 1, tiempo: 60)
-- "Hipótesis: planteamiento + contexto operacional (en plataforma)" (complejidad: 2, tiempo: 75)
-- "Escuchas y validacion de hipotesis (en plataforma)" (complejidad: 2, tiempo: 165)
-- "Validación hipótesis en conjunto con LCoach" (complejidad: 1, tiempo: 60)
-- "Análisis con IA: descarga LEA + armado para análisis IA" (complejidad: 3, tiempo: 60)
-- "Armar slide y plan de acción para seguimiento" (complejidad: 2, tiempo: 60)
-- "Seguimiento de focos (en plataforma)" (complejidad: 2, tiempo: 60)
+- "Paso 1-4: Revisión de indicadores Radar / Foco" (complejidad: 1, tiempo: 60)
+- "Paso 5: Hipótesis: planteamiento + contexto" (complejidad: 2, tiempo: 75)
+- "Paso 6: Validación en Operación (Escuchas/Lado a lado)" (complejidad: 2, tiempo: 165)
+- "Paso 6.1: Validación hipótesis en conjunto con LCoach" (complejidad: 1, tiempo: 60)
+- "Paso 7-8: Análisis con IA (LEA + Amelia)" (complejidad: 3, tiempo: 60)
+- "Paso 9: Construir Entregable (slide/plan acción)" (complejidad: 2, tiempo: 60)
+- "Paso 10-12: Seguimiento, Ajuste y Escalamiento" (complejidad: 2, tiempo: 60)
 
 [CATÁLOGO - Calidad LATAM]
 - "Análisis profundo IA + escuchas" (complejidad: 3, tiempo: 240)
@@ -1180,9 +1244,10 @@ TU OBJETIVO PRINCIPAL:
 - "Revisión levantamientos Operación" (complejidad: 1, tiempo: 30)
 - "Calibraciones" (complejidad: 1, tiempo: 60)
 
-3. Con base en esa similitud, extrae en secreto y asigna automáticamente las propiedades "complejidad", "tiempo_estimado" y "rol_ejecutante" según el catálogo. Si no logras encontrar similitud, asume por defecto complejidad 2, tiempo 60 y rol "Calidad Fabrica".
-4. Asigna una "prioridad" lógica entre 7 (para alta), 4 (para media) o 2 (para baja). La IA NO debe asignar la prioridad 10 (crítica), ya que esta prioridad es exclusiva para asignación manual del usuario. REGLA CRÍTICA DE PRIORIDAD: Si la complejidad asignada según el catálogo es 1 (baja), la prioridad NO puede ser alta (7) y debes asignar obligatoriamente prioridad media (4) o baja (2).
-5. Asigna el "area" más lógica ("Operativo", "Monitoreo", "Tendencias", "Escuelita", "Calidad").
+3. Con base en esa similitud, extrae en secreto y asigna automáticamente "complejidad", "tiempo_estimado" y "rol_ejecutante" según el catálogo. Si no hay similitud, asume complejidad 2, tiempo 60 y rol "Calidad Fabrica".
+4. REGLA DE ARRASTRE: Si en el texto el usuario menciona que es una tarea "retrasada", "pendiente de ayer", o que lleva días "arrastrándose", DEBES sumar obligatoriamente +1 al nivel de complejidad original y si la complejidad final es >=3, sugiere dividir la tarea.
+5. Asigna una "prioridad" lógica (7 alta, 4 media, 2 baja). REGLA CRÍTICA: Si la complejidad asignada es 1, la prioridad NO puede ser alta (7).
+6. Asigna el "area" más lógica ("Operativo", "Monitoreo", "Tendencias", "Escuelita", "Calidad").
 
 El formato de salida debe ser ESTRICTAMENTE un JSON array de objetos con:
 "actividad" (string), "prioridad" (number), "area" (string), "complejidad" (number), "tiempo_estimado" (number), "rol_ejecutante" (string).
@@ -1201,7 +1266,212 @@ Texto a analizar: "${text}"`;
     }
   });
 
+
+  // ─── ADMIN: Resumen Global del Equipo ───────────────────────────────────────
+  app.get("/api/admin/resumen", (req, res) => {
+    const { fechaInicio, fechaFin } = req.query;
+    if (!fechaInicio || !fechaFin) {
+      return res.status(400).json({ error: "Se requiere fechaInicio y fechaFin" });
+    }
+
+    // 1. Todos los agentes (operadores + supervisores)
+    const agentes = db.prepare("SELECT id, nombre, email, initials, role, rol_ejecutante FROM Usuarios").all() as any[];
+
+    // 2. Tareas en el rango
+    const tareas = db.prepare(`
+      SELECT T.*, U.nombre as user_name, U.initials as user_initials, U.rol_ejecutante
+      FROM Tareas T
+      JOIN Usuarios U ON T.user_id = U.id
+      WHERE T.fecha >= ? AND T.fecha <= ?
+    `).all(fechaInicio, fechaFin) as any[];
+
+    // 3. Incidencias en el rango (excluir almuerzo para fuga)
+    const incidencias = db.prepare(`
+      SELECT I.*, U.nombre as user_name
+      FROM Incidencias I
+      JOIN Usuarios U ON I.user_id = U.id
+      WHERE I.fecha >= ? AND I.fecha <= ?
+    `).all(fechaInicio, fechaFin) as any[];
+
+    // 4. Jornadas cerradas en el rango
+    const planesCount = db.prepare(`
+      SELECT COUNT(*) as total, SUM(CASE WHEN estado_cierre = 1 THEN 1 ELSE 0 END) as cerrados
+      FROM PlanesDiarios
+      WHERE date >= ? AND date <= ?
+    `).get(fechaInicio, fechaFin) as any;
+
+    // 5. Métricas globales
+    const RESOLVED = ['resuelto', 'terminada'];
+    const totalTareas = tareas.length;
+    const completadas = tareas.filter((t: any) => RESOLVED.includes((t.estado_ejecucion || '').toLowerCase())).length;
+    const tasaCumplimiento = totalTareas > 0 ? Math.round((completadas / totalTareas) * 100) : 0;
+
+    const criticas = tareas.filter((t: any) => t.prioridad === 10);
+    const criticasCompletadas = criticas.filter((t: any) => RESOLVED.includes((t.estado_ejecucion || '').toLowerCase())).length;
+    const tasaCriticas = criticas.length > 0 ? Math.round((criticasCompletadas / criticas.length) * 100) : 0;
+
+    const altas = tareas.filter((t: any) => t.prioridad >= 7);
+    const altasCompletadas = altas.filter((t: any) => RESOLVED.includes((t.estado_ejecucion || '').toLowerCase())).length;
+    const tasaAltas = altas.length > 0 ? Math.round((altasCompletadas / altas.length) * 100) : 0;
+
+    const reprogramadas = tareas.filter((t: any) => !RESOLVED.includes((t.estado_ejecucion || '').toLowerCase()) && (t.estado_ejecucion || '').toLowerCase() !== 'arrastrada').length;
+    
+    const arrastradasList = tareas.filter((t: any) => (t.estado_ejecucion || '').toLowerCase() === 'arrastrada');
+    const arrastradas = arrastradasList.length;
+    const antiguedadPromedio = arrastradas > 0 ? +(arrastradasList.reduce((acc: number, t: any) => acc + (t.antiguedad || 0), 0) / arrastradas).toFixed(1) : 0;
+
+    const backlogItems = db.prepare("SELECT created_at FROM Backlog WHERE status NOT IN ('terminada', 'despriorizado')").all() as any[];
+    const nowTemp = new Date();
+    let backlogAcumuladoDias = 0;
+    backlogItems.forEach((item: any) => {
+      if (item.created_at) {
+        const created = new Date(item.created_at.replace(" ", "T")); // handle SQL space vs ISO T format safely
+        const diffTime = Math.max(0, nowTemp.getTime() - created.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        backlogAcumuladoDias += diffDays;
+      }
+    });
+    const backlogCount = backlogItems.length || 1;
+    const backlogPromedioDias = Math.round(backlogAcumuladoDias / backlogCount);
+
+    // Horas invertidas (tiempo_invertido_minutos)
+    const totalMinutosInvertidos = tareas.reduce((acc: number, t: any) => acc + (t.tiempo_invertido_minutos || 0), 0);
+    const horasInvertidas = +(totalMinutosInvertidos / 60).toFixed(1);
+
+    // Horas planeadas (tiempo_asignado_minutos)
+    const totalMinutosPlaneados = tareas.reduce((acc: number, t: any) => acc + (t.tiempo_asignado_minutos || 0), 0);
+    const horasPlaneadas = +(totalMinutosPlaneados / 60).toFixed(1);
+
+    // Fuga operativa (incidencias no-almuerzo)
+    const minutosLeakGlobal = incidencias.reduce((acc: number, inc: any) => {
+      if (inc.tipo === 'Almuerzo') return acc;
+      if (!inc.hora_inicio || !inc.hora_fin) return acc;
+      const [h1, m1] = inc.hora_inicio.split(':').map(Number);
+      const [h2, m2] = inc.hora_fin.split(':').map(Number);
+      const diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+      return acc + (diff > 0 ? diff : 0);
+    }, 0);
+    const horasLeak = +(minutosLeakGlobal / 60).toFixed(1);
+
+    // 6. Por-agente breakdown
+    const porAgente = agentes.map((u: any) => {
+      const ut = tareas.filter((t: any) => t.user_id === u.id);
+      const uc = ut.filter((t: any) => RESOLVED.includes((t.estado_ejecucion || '').toLowerCase()));
+      const ui = incidencias.filter((i: any) => i.user_id === u.id && i.tipo !== 'Almuerzo');
+
+      const minsInv = ut.reduce((a: number, t: any) => a + (t.tiempo_invertido_minutos || 0), 0);
+      const minsPlan = ut.reduce((a: number, t: any) => a + (t.tiempo_asignado_minutos || 0), 0);
+      const minsLeak = ui.reduce((a: number, inc: any) => {
+        if (!inc.hora_inicio || !inc.hora_fin) return a;
+        const [h1, m1] = inc.hora_inicio.split(':').map(Number);
+        const [h2, m2] = inc.hora_fin.split(':').map(Number);
+        const diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+        return a + (diff > 0 ? diff : 0);
+      }, 0);
+
+      const tRate = ut.length > 0 ? Math.round((uc.length / ut.length) * 100) : 0;
+      const criticas = ut.filter((t: any) => t.prioridad === 10).length;
+      const criticasOk = ut.filter((t: any) => t.prioridad === 10 && RESOLVED.includes((t.estado_ejecucion || '').toLowerCase())).length;
+
+      // Carga cognitiva promedio diaria
+      const weights: Record<number, number> = { 10: 2.0, 7: 1.5, 4: 1.0, 2: 0.5 };
+      const totalCognitiveLoad = uc.reduce((acc: number, t: any) => {
+        const priority = t.prioridad || 4;
+        return acc + (weights[priority] || 1.0);
+      }, 0);
+      const uniqueDates = new Set(ut.map((t: any) => t.fecha));
+      const diasActivos = uniqueDates.size || 1;
+      const cargaCognitiva = +(totalCognitiveLoad / diasActivos).toFixed(1);
+
+      return {
+        id: u.id,
+        nombre: u.nombre,
+        email: u.email,
+        initials: u.initials,
+        role: u.role,
+        rol_ejecutante: u.rol_ejecutante,
+        totalTareas: ut.length,
+        completadas: uc.length,
+        tasaCumplimiento: tRate,
+        horasInvertidas: +(minsInv / 60).toFixed(1),
+        horasPlaneadas: +(minsPlan / 60).toFixed(1),
+        horasLeak: +(minsLeak / 60).toFixed(1),
+        incidencias: ui.length,
+        criticas,
+        criticasCompletadas: criticasOk,
+        tasaCriticas: criticas > 0 ? Math.round((criticasOk / criticas) * 100) : 0,
+        cargaCognitiva,
+      };
+    });
+
+    // 7. Tendencia diaria (tareas completadas por fecha)
+    const tendenciaDiaria: Record<string, { total: number; completadas: number }> = {};
+    tareas.forEach((t: any) => {
+      if (!tendenciaDiaria[t.fecha]) tendenciaDiaria[t.fecha] = { total: 0, completadas: 0 };
+      tendenciaDiaria[t.fecha].total++;
+      if (RESOLVED.includes((t.estado_ejecucion || '').toLowerCase())) {
+        tendenciaDiaria[t.fecha].completadas++;
+      }
+    });
+
+    // 8. Distribución por área
+    const distribucionArea: Record<string, number> = {};
+    tareas.forEach((t: any) => {
+      const a = t.area || 'Operativo';
+      distribucionArea[a] = (distribucionArea[a] || 0) + 1;
+    });
+
+    // 9. Distribución por prioridad
+    const distribucionPrioridad = {
+      critica: tareas.filter((t: any) => t.prioridad === 10).length,
+      alta: tareas.filter((t: any) => t.prioridad === 7).length,
+      media: tareas.filter((t: any) => t.prioridad === 4).length,
+      baja: tareas.filter((t: any) => t.prioridad <= 2).length,
+    };
+
+    // 10. Tipos de incidencias
+    const tiposIncidencia: Record<string, number> = {};
+    incidencias.forEach((i: any) => {
+      if (i.tipo === 'Almuerzo') return;
+      tiposIncidencia[i.tipo] = (tiposIncidencia[i.tipo] || 0) + 1;
+    });
+
+    res.json({
+      resumenGlobal: {
+        totalTareas,
+        completadas,
+        tasaCumplimiento,
+        horasInvertidas,
+        horasPlaneadas,
+        horasLeak,
+        criticas: criticas.length,
+        criticasCompletadas,
+        tasaCriticas,
+        tasaAltas,
+        jornadas: planesCount,
+        reprogramadas,
+        arrastradas,
+        antiguedadPromedio,
+        backlogAcumuladoDias,
+        backlogPromedioDias,
+      },
+      porAgente,
+      tendenciaDiaria: Object.entries(tendenciaDiaria)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([fecha, v]) => ({
+          fecha,
+          total: v.total,
+          completadas: v.completadas,
+          tasa: v.total > 0 ? Math.round((v.completadas / v.total) * 100) : 0,
+        })),
+      distribucionArea,
+      distribucionPrioridad,
+      tiposIncidencia,
+    });
+  });
+
   // Vite middleware for development
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

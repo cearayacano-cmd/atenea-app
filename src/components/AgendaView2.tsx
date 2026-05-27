@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle2, Circle, AlertTriangle, Calendar as CalendarIcon, Save, PlusCircle, Clock, Tag, X, Loader2, Link as LinkIcon, Paperclip, Plus, Trash2, BrainCircuit, Activity, TrendingUp, BarChart3, CheckCircle, Zap, ListChecks } from 'lucide-react';
+import { CheckCircle2, Circle, AlertTriangle, Calendar as CalendarIcon, Save, PlusCircle, Clock, Tag, X, Loader2, Link as LinkIcon, Paperclip, Plus, Trash2, BrainCircuit, Activity, TrendingUp, BarChart3, CheckCircle, Zap, ListChecks, RefreshCw } from 'lucide-react';
 import { getStatusColor, getPriorityColor } from '../utils/colors';
 
 interface Task {
@@ -65,9 +65,11 @@ const getAge = (createdAt: string | undefined): string => {
   if (!createdAt) return '';
   try {
     const created = new Date(createdAt.includes('T') ? createdAt : createdAt + 'T00:00:00');
+    if (isNaN(created.getTime())) return '';
     const now = new Date();
     const diffMs = now.getTime() - created.getTime();
     const diffMins = Math.floor(diffMs / 60000);
+    if (isNaN(diffMins)) return '';
     if (diffMins < 1) return 'ahora';
     if (diffMins < 60) return `${diffMins}m`;
     const diffHours = Math.floor(diffMins / 60);
@@ -525,10 +527,45 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
 
       if (!closureRes.ok) throw new Error('Error al cerrar el plan diario');
 
-      if (onNavigate) onNavigate('dashboard');
+      if (onNavigate) onNavigate('dashboard2');
     } catch (error) {
       console.error('Error al finalizar el día:', error);
       setErrorCierre(error instanceof Error ? error.message : 'Hubo un error al guardar los datos. Por favor, inténtalo de nuevo.');
+    } finally {
+      setIsClosing(false);
+    }
+  };
+
+  const handleReopenDay = async () => {
+    const justification = window.prompt("Por favor, escribe una justificación para reabrir este turno (Requerido):");
+    if (justification === null) {
+      return; // Cancelled
+    }
+    if (!justification.trim()) {
+      alert("La justificación es requerida para reabrir el turno.");
+      return;
+    }
+
+    setIsClosing(true);
+    setErrorCierre(null);
+    try {
+      const res = await fetch('/api/plan-diario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: selectedDate,
+          estado_cierre: 0,
+          justificacion_reapertura: justification.trim()
+        }),
+      });
+
+      if (!res.ok) throw new Error('Error al reabrir el plan diario');
+      
+      await fetchData();
+      alert("✅ Turno reabierto con éxito. Ya puedes realizar modificaciones.");
+    } catch (error) {
+      console.error('Error al reabrir el día:', error);
+      setErrorCierre(error instanceof Error ? error.message : 'Hubo un error al reabrir el turno.');
     } finally {
       setIsClosing(false);
     }
@@ -792,16 +829,16 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                 </button>
               )}
               <button 
-                onClick={handleFinishDay}
-                disabled={isClosing || isClosed}
-                className={`flex items-center gap-2 px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg ${
+                onClick={isClosed ? handleReopenDay : handleFinishDay}
+                disabled={isClosing}
+                className={`flex items-center gap-2 px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg hover:scale-105 active:scale-95 ${
                   isClosed 
-                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                    : 'bg-slate-900 text-white hover:bg-black'
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20' 
+                    : 'bg-slate-900 hover:bg-black text-white'
                 }`}
               >
-                {isClosing ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                {isClosed ? 'Turno Finalizado' : 'Finalizar Turno'}
+                {isClosing ? <Loader2 className="animate-spin" size={18} /> : (isClosed ? <RefreshCw size={14} /> : <Save size={18} />)}
+                {isClosed ? 'Reabrir Turno' : 'Finalizar Turno'}
               </button>
             </div>
           </div>
@@ -1089,7 +1126,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
             <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
               <div className="space-y-1">
                 <div className="flex items-center gap-3">
-                  <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase text-white ${getPriorityInfo(editingTask.prioridad).color}`}>{getPriorityInfo(editingTask.prioridad).label}</span>
+                  <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase ${getPriorityColor(editingTask.prioridad).badge}`}>{getPriorityColor(editingTask.prioridad).label}</span>
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{editingTask.area || 'GENERAL'}</span>
                 </div>
                 <h3 className="text-2xl font-black text-slate-800 leading-tight">{editingTask.actividad}</h3>
@@ -1108,19 +1145,19 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                     { id: 'resuelto',      label: 'RESUELTO',      color: 'bg-[#858585] text-white' },
                     { id: 'despriorizado', label: 'DESPRIORIZADO', color: 'bg-[#B8B8B8] text-[#4D4D4D]' },
                     { id: 'fallo',         label: 'FALLO',         color: 'bg-[#B20F3B] text-white' },
-                  ].map((state) => (
+                  ].filter(state => state.id !== 'nuevo').map((state) => (
                     <button 
-                      key={state.id} 
-                      disabled={isClosed} 
-                      onClick={() => { 
-                        const isDone = state.id === 'resuelto'; 
-                        updateTask(editingTask.id, { estado_ejecucion: state.id, completada: isDone }); 
-                        setEditingTask({...editingTask, estado_ejecucion: state.id, completada: isDone}); 
-                      }} 
-                      className={`text-[9px] font-black px-4 py-2.5 rounded-xl transition-all ${editingTask.estado_ejecucion === state.id ? `${state.color} shadow-lg scale-105 ring-2 ring-offset-2 ring-black/10` : 'bg-white text-slate-400 hover:text-slate-600 border border-slate-200/50'}`}
-                    >
-                      {state.label}
-                    </button>
+                       key={state.id} 
+                       disabled={isClosed} 
+                       onClick={() => { 
+                         const isDone = state.id === 'resuelto'; 
+                         updateTask(editingTask.id, { estado_ejecucion: state.id, completada: isDone }); 
+                         setEditingTask({...editingTask, estado_ejecucion: state.id, completada: isDone}); 
+                       }} 
+                       className={`text-[9px] font-black px-4 py-2.5 rounded-xl transition-all ${editingTask.estado_ejecucion === state.id ? `${state.color} shadow-lg scale-105 ring-2 ring-offset-2 ring-black/10` : 'bg-white text-slate-400 hover:text-slate-600 border border-slate-200/50'}`}
+                     >
+                       {state.label}
+                     </button>
                   ))}
                 </div>
 

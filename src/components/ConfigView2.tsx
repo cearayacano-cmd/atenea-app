@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Calendar, Clock, Trash2, Plus, Wand2, ListChecks, Database, ArrowRight, X, LayoutList, AlertTriangle, Archive, Users, User, ChevronDown } from 'lucide-react';
+import { Save, Calendar, Clock, Trash2, Plus, Wand2, ListChecks, Database, ArrowRight, X, LayoutList, AlertTriangle, Archive, Users, User, ChevronDown, Zap, Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getStatusColor, getPriorityColor } from '../utils/colors';
 
@@ -101,6 +101,17 @@ export default function ConfigView2() {
   const [justificationText, setJustificationText] = useState('');
   const [isButtonDropdownOpen, setIsButtonDropdownOpen] = useState(false);
   const [usersList, setUsersList] = useState<any[]>([]);
+
+  // States for custom AI quick task creation
+  const [isCustomAiModalOpen, setIsCustomAiModalOpen] = useState(false);
+  const [customAiTaskText, setCustomAiTaskText] = useState('');
+  const [customAiArea, setCustomAiArea] = useState('Operativo');
+  const [customAiIsCollab, setCustomAiIsCollab] = useState(false);
+  const [customAiAssignedUsers, setCustomAiAssignedUsers] = useState<number[]>([]);
+  const [customAiStep, setCustomAiStep] = useState<'input' | 'preview'>('input');
+  const [customAiSelectedOption, setCustomAiSelectedOption] = useState('Revisión de indicadores entregados por RADAR');
+  const [customAiPreviewResult, setCustomAiPreviewResult] = useState<any>(null);
+  const [customAiMode, setCustomAiMode] = useState<'rayo' | 'bot'>('rayo');
 
   // Filtros y paginación del Archivo de Backlog
   const [archiveSearch, setArchiveSearch] = useState('');
@@ -262,6 +273,54 @@ export default function ConfigView2() {
     return dates.some(dStr => dStr < targetDate && dailyPlans[dStr]?.estado_cierre === 0);
   };
 
+  const validateCriticalTasksForDay = async (task: any, dateStr: string): Promise<boolean> => {
+    if (Number(task.prioridad) !== 10) return true;
+
+    const currentUserId = Number(localStorage.getItem('atenea_user_id') || 1);
+    const targetUsers: number[] = (task.is_collaborative && Array.isArray(task.assignedUsers) && task.assignedUsers.length > 0)
+      ? task.assignedUsers
+      : [currentUserId];
+
+    try {
+      const res = await fetch(`/api/reporte-tiempos?fechaInicio=${dateStr}&fechaFin=${dateStr}`);
+      const data = await res.json();
+      const tasksOnDay = data.tasks || [];
+      const activeStates = ['nuevo', 'abierto', 'progreso', 'en progreso'];
+
+      // Check for active user first (must be a hard block)
+      if (targetUsers.includes(currentUserId)) {
+        const hasCriticalSelf = tasksOnDay.some((t: any) => 
+          t.user_id === currentUserId && 
+          Number(t.prioridad) === 10 && 
+          activeStates.includes((t.estado_ejecucion || 'nuevo').toLowerCase())
+        );
+        if (hasCriticalSelf) {
+          alert("❌ LÍMITE DE TAREA CRÍTICA: Solo puedes planificar una tarea crítica por día.");
+          return false;
+        }
+      }
+
+      // Check for colleagues (warning / confirm only)
+      for (const uid of targetUsers) {
+        if (uid === currentUserId) continue;
+        const hasCriticalColleague = tasksOnDay.some((t: any) => 
+          t.user_id === uid && 
+          Number(t.prioridad) === 10 && 
+          activeStates.includes((t.estado_ejecucion || 'nuevo').toLowerCase())
+        );
+        if (hasCriticalColleague) {
+          const colleagueInfo = usersList.find(u => u.id === uid);
+          const name = colleagueInfo ? colleagueInfo.nombre : `Usuario #${uid}`;
+          const proceed = window.confirm(`⚠️ AVISO: El compañero "${name}" ya tiene una tarea crítica asignada para este día. ¿Deseas asignársela de todas formas?`);
+          if (!proceed) return false;
+        }
+      }
+    } catch (err) {
+      console.error("Error validating critical tasks:", err);
+    }
+    return true;
+  };
+
   const handleDropToDay = async (e: React.DragEvent, dateStr: string) => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData("taskId");
@@ -275,8 +334,20 @@ export default function ConfigView2() {
       return;
     }
 
+    const isValid = await validateCriticalTasksForDay(task, dateStr);
+    if (!isValid) return;
+
     // Alerta de capacidad pero sin impedir la asignación
-    const { remainingHours } = calculateTimeInfo();
+    let tasksOnDay = [];
+    try {
+      const res = await fetch(`/api/reporte-tiempos?fechaInicio=${dateStr}&fechaFin=${dateStr}`);
+      const data = await res.json();
+      tasksOnDay = data.tasks || [];
+    } catch (err) {
+      console.error(err);
+    }
+
+    const { remainingHours } = calculateTimeInfo(dateStr, tasksOnDay);
     if (remainingHours <= 0) {
        const proceed = window.confirm("⚠️ CAPACIDAD ALCANZADA: La jornada de este día ya está llena. ¿Deseas forzar la carga de esta tarea?");
        if (!proceed) return;
@@ -315,10 +386,28 @@ export default function ConfigView2() {
     const taskId = e.dataTransfer.getData('taskId');
     if (!taskId) return;
     
+    const task = backlog.find(t => t.id === Number(taskId));
+    let justificacion: string | undefined = undefined;
+
+    if (newPriority === 10 && task && task.prioridad !== 10) {
+      const justification = window.prompt("Por favor, escribe una justificación para cambiar esta tarea a prioridad CRÍTICA (Requerido):");
+      if (justification === null) {
+        return; // Cancelled
+      }
+      if (!justification.trim()) {
+        alert("El cambio a prioridad CRÍTICA requiere una justificación.");
+        return;
+      }
+      justificacion = justification.trim();
+    }
+    
     await fetch(`/api/backlog/${taskId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prioridad: newPriority })
+      body: JSON.stringify({ 
+        prioridad: newPriority,
+        justificacion: justificacion 
+      })
     });
     fetchBacklog();
   };
@@ -357,10 +446,10 @@ export default function ConfigView2() {
       }
     }
 
-    // 2. Validar justificación de cambio de prioridad
-    if (editingTask.id && originalPriority !== null && editingTask.prioridad !== originalPriority) {
+    // 2. Validar justificación de cambio de prioridad (Solo si cambia a CRÍTICA, es decir, valor 10)
+    if (editingTask.id && originalPriority !== null && Number(editingTask.prioridad) === 10 && originalPriority !== 10) {
       if (!justificationText.trim()) {
-        alert("Por favor, escribe una justificación para el cambio de prioridad.");
+        alert("Por favor, escribe una justificación para el cambio a prioridad CRÍTICA.");
         return;
       }
     }
@@ -500,6 +589,104 @@ export default function ConfigView2() {
     fetchBacklog();
   };
 
+  const handleAnalyzeCustomAiTask = async () => {
+    const textToAnalyze = customAiSelectedOption === 'Otro' ? customAiTaskText : customAiSelectedOption;
+    if (!textToAnalyze.trim()) return;
+    setIsProcessing(true);
+    try {
+      const res = await fetch('/api/ai/analyze-backlog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: textToAnalyze })
+      });
+      const items = await res.json();
+      
+      let aiPriority = 4;
+      let aiComplexity = 2;
+      let aiTime = 60;
+      let aiActivity = textToAnalyze;
+      let aiRole = 'Calidad Fabrica';
+
+      if (Array.isArray(items) && items.length > 0) {
+        const suggested = items[0];
+        aiPriority = suggested.prioridad || 4;
+        aiComplexity = suggested.complejidad || 2;
+        aiTime = suggested.tiempo_estimado || 60;
+        aiActivity = suggested.actividad || textToAnalyze;
+        aiRole = suggested.rol_ejecutante || 'Calidad Fabrica';
+      }
+
+      setCustomAiPreviewResult({
+        actividad: aiActivity,
+        prioridad: aiPriority,
+        complejidad: aiComplexity,
+        tiempo_estimado: aiTime,
+        area: customAiArea,
+        is_collaborative: customAiIsCollab,
+        assignedUsers: customAiIsCollab ? customAiAssignedUsers : [Number(localStorage.getItem('atenea_user_id') || 1)],
+        rol_ejecutante: aiRole,
+        status: 'nuevo'
+      });
+
+      setCustomAiStep('preview');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleConfirmCustomAiTask = async () => {
+    if (!customAiPreviewResult) return;
+    setIsProcessing(true);
+    try {
+      await fetch('/api/backlog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(customAiPreviewResult)
+      });
+      setIsCustomAiModalOpen(false);
+      setCustomAiStep('input');
+      setCustomAiTaskText('');
+      setCustomAiPreviewResult(null);
+      fetchBacklog();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const getDropdownOptions = () => {
+    const currentUserId = Number(localStorage.getItem('atenea_user_id') || 1);
+    const currentUser = usersList.find(u => u.id === currentUserId);
+    const isAdmin = currentUser?.email === 'carlose.araya@latam.com' || currentUser?.role === 'supervisor';
+    const execRole = currentUser?.rol_ejecutante || 'Calidad Fabrica';
+
+    let options: string[] = [];
+    if (isAdmin) {
+      const fabricaTasks = MATRIZ_TAREAS['Calidad Fabrica']?.map(t => t.actividad) || [];
+      const latamTasks = MATRIZ_TAREAS['Calidad LATAM']?.map(t => t.actividad) || [];
+      options = [...fabricaTasks, ...latamTasks];
+    } else {
+      options = MATRIZ_TAREAS[execRole]?.map(t => t.actividad) || [];
+    }
+    return options;
+  };
+
+  const openCustomAiModal = () => {
+    const options = getDropdownOptions();
+    setCustomAiMode('rayo');
+    setCustomAiSelectedOption(options[0] || '');
+    setCustomAiTaskText('');
+    setCustomAiArea('Operativo');
+    setCustomAiIsCollab(false);
+    setCustomAiAssignedUsers([Number(localStorage.getItem('atenea_user_id') || 1)]);
+    setCustomAiStep('input');
+    setCustomAiPreviewResult(null);
+    setIsCustomAiModalOpen(true);
+  };
+
   const deleteBacklog = (id: number) => fetch(`/api/backlog/${id}`, { method: 'DELETE' }).then(fetchBacklog);
 
   const handleRestoreBacklog = async (id: number) => {
@@ -527,6 +714,9 @@ export default function ConfigView2() {
       alert("🔒 Bloqueo de Planificación: Tienes un día anterior sin cerrar. Por favor finaliza el turno del día pendiente en su Agenda Pro antes de planificar nuevas jornadas.");
       return;
     }
+
+    const isValid = await validateCriticalTasksForDay(task, selectedPlanningDate);
+    if (!isValid) return;
     
     // Check capacity before adding
     const weights: Record<number, number> = { 10: 2, 7: 1.5, 4: 1, 2: 0.5 };
@@ -585,10 +775,12 @@ export default function ConfigView2() {
     }
   };
 
-  const calculateTimeInfo = () => {
+  const calculateTimeInfo = (targetDate?: string, customTasks?: any[]) => {
+    const dateStr = targetDate || selectedPlanningDate;
+    const tasks = customTasks || ((dateStr === selectedPlanningDate) ? dayTasks : []);
     const weights: Record<number, number> = { 10: 2, 7: 1.5, 4: 1, 2: 0.5 };
     let usedHours = 0;
-    dayTasks.forEach(t => {
+    tasks.forEach(t => {
       const baseHours = weights[t.prioridad] || 1;
       const status = (t.estado_ejecucion || 'nuevo').toLowerCase();
       
@@ -607,11 +799,22 @@ export default function ConfigView2() {
     const [endH, endM] = safeEnd.split(':').map(Number);
     let availableHours = (endH + (endM || 0) / 60) - (startH + (startM || 0) / 60);
 
-    const almuerzoBlocks = bloques.filter(b => b.tipo === 'Almuerzo');
-    almuerzoBlocks.forEach(b => {
+    let diaNombre = '';
+    if (dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      const dayIdx = d.getDay();
+      const daysEs = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      diaNombre = daysEs[dayIdx];
+    }
+
+    const dayBlocks = dateStr 
+      ? bloques.filter(b => b.dia_semana === diaNombre || b.fecha === dateStr)
+      : [];
+
+    dayBlocks.forEach(b => {
       const [bStartH, bStartM] = b.hora_inicio.split(':').map(Number);
       const [bEndH, bEndM] = b.hora_fin.split(':').map(Number);
-      const duration = (bEndH + bEndM / 60) - (bStartH + bStartM / 60);
+      const duration = (bEndH + (bEndM || 0) / 60) - (bStartH + (bStartM || 0) / 60);
       availableHours -= duration;
     });
 
@@ -691,32 +894,49 @@ export default function ConfigView2() {
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{editingTask?.id ? 'Editar Actividad' : 'Nueva Actividad'}</h3>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden">
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">{editingTask?.id ? 'Editar Actividad' : 'Nueva Actividad'}</h3>
                 <button onClick={() => { setIsModalOpen(false); setOriginalPriority(null); setJustificationText(''); }} className="text-slate-400 hover:text-red-500 transition-colors">✕</button>
               </div>
-              <form onSubmit={handleSaveTask} className="p-6 space-y-5">
+              <form onSubmit={handleSaveTask} className="p-5 space-y-4">
                 
-                {/* 1. Selector de Rol Ejecutante */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Rol que Ejecuta</label>
-                  <select 
-                    value={editingTask?.rol_ejecutante || 'Calidad Fabrica'} 
-                    onChange={e => {
-                      const newRole = e.target.value;
-                      setEditingTask({...editingTask, rol_ejecutante: newRole, actividad: ''});
-                    }}
-                    className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary"
-                  >
-                    <option value="Calidad Fabrica">Calidad Fábrica</option>
-                    <option value="Calidad LATAM">Calidad LATAM</option>
-                  </select>
+                {/* 1. Rol y Área en Paralelo */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Rol que Ejecuta</label>
+                    <select 
+                      value={editingTask?.rol_ejecutante || 'Calidad Fabrica'} 
+                      onChange={e => {
+                        const newRole = e.target.value;
+                        setEditingTask({...editingTask, rol_ejecutante: newRole, actividad: ''});
+                      }}
+                      className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary"
+                    >
+                      <option value="Calidad Fabrica">Calidad Fábrica</option>
+                      <option value="Calidad LATAM">Calidad LATAM</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Área / Categoría</label>
+                    <select 
+                      value={editingTask?.area || 'Operativo'} 
+                      onChange={e => setEditingTask({...editingTask, area: e.target.value})}
+                      className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary"
+                    >
+                      <option value="Operativo">Operativo</option>
+                      <option value="Monitoreo">Monitoreo</option>
+                      <option value="Tendencias">Tendencias</option>
+                      <option value="Escuelita">Escuelita</option>
+                      <option value="Calidad">Calidad</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* 2. Actividad (Predefinida o Libre) */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Actividad</label>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Actividad</label>
                   <select 
                     value={editingTask?.actividad || ''} 
                     onChange={e => {
@@ -740,7 +960,7 @@ export default function ConfigView2() {
                         });
                       }
                     }}
-                    className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary mb-2"
+                    className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary mb-1.5"
                   >
                     <option value="">-- Seleccionar Tarea del Catálogo --</option>
                     {(MATRIZ_TAREAS[editingTask?.rol_ejecutante || 'Calidad Fabrica'] || []).map((t, i) => (
@@ -754,40 +974,42 @@ export default function ConfigView2() {
                       value={editingTask?.actividad === 'Otro' ? '' : editingTask?.actividad} 
                       onChange={e => setEditingTask({...editingTask, actividad: e.target.value})}
                       placeholder="Escribe la descripción de la actividad..."
-                      className="w-full p-4 rounded-xl bg-slate-50 border border-slate-100 text-xs font-bold text-slate-700 outline-none focus:border-primary h-24 resize-none"
+                      className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary h-16 resize-none"
                       required
                     />
                   ) : null}
                 </div>
 
-                {/* 3. Área e Información Técnica */}
+                {/* 3. Complejidad y Colaborativo en Paralelo */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Área / Categoría</label>
-                    <select 
-                      value={editingTask?.area || 'Operativo'} 
-                      onChange={e => setEditingTask({...editingTask, area: e.target.value})}
-                      className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary"
-                    >
-                      <option value="Operativo">Operativo</option>
-                      <option value="Monitoreo">Monitoreo</option>
-                      <option value="Tendencias">Tendencias</option>
-                      <option value="Escuelita">Escuelita</option>
-                      <option value="Calidad">Calidad</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Complejidad</label>
-                    <div className="p-3 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 text-center">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Complejidad</label>
+                    <div className="p-2 bg-slate-100 rounded-xl text-[10px] font-bold text-slate-600 text-center">
                       {editingTask?.complejidad === 1 ? '1 - BAJO' : editingTask?.complejidad === 2 ? '2 - MEDIO' : '3 - ALTO'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 flex flex-col justify-end">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Colaborativo / Grupo</span>
+                    <div className="flex items-center justify-between p-2 bg-slate-50 border border-slate-100 rounded-xl h-[33px]">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase ml-1">Activar</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={editingTask?.is_collaborative || false}
+                          onChange={e => setEditingTask({...editingTask, is_collaborative: e.target.checked, assignedUsers: e.target.checked ? [Number(localStorage.getItem('atenea_user_id') || 1)] : []})}
+                          className="sr-only peer"
+                        />
+                        <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-350 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
                     </div>
                   </div>
                 </div>
 
-                {/* 4. Prioridad */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Prioridad / Gravedad</label>
-                  <div className="grid grid-cols-2 gap-2">
+                {/* 4. Prioridad (Fila Horizontal Compacta de 4 Columnas) */}
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Prioridad / Gravedad</label>
+                  <div className="grid grid-cols-4 gap-2">
                     {PRIORITIES.map(p => (
                       <button 
                         key={p.value} 
@@ -798,73 +1020,68 @@ export default function ConfigView2() {
                           }
                           setEditingTask({...editingTask, prioridad: p.value});
                         }}
-                        className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex items-center gap-2 ${editingTask?.prioridad === p.value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
+                        className={`py-2 px-1 rounded-xl border text-[9px] font-black uppercase transition-all flex items-center justify-center gap-1 ${editingTask?.prioridad === p.value ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
                       >
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getPriorityColor(p.value).hex }} />
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getPriorityColor(p.value).hex }} />
                         {p.label}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* 5. Justificación de Cambio de Prioridad (Sólo si cambia) */}
-                {editingTask?.id && originalPriority !== null && editingTask.prioridad !== originalPriority && (
-                  <div className="space-y-1.5 animate-in fade-in duration-300">
-                    <label className="text-[10px] font-black text-rose-500 uppercase ml-1">Justificación del Cambio (Requerida)</label>
-                    <textarea
-                      value={justificationText}
-                      onChange={e => setJustificationText(e.target.value)}
-                      placeholder="Explica brevemente por qué estás cambiando la prioridad original de esta tarea..."
-                      className="w-full p-3 rounded-xl bg-rose-50/20 border border-rose-200 text-xs font-bold text-slate-700 outline-none focus:border-rose-500 h-20 resize-none"
-                      required
-                    />
-                  </div>
-                )}
-
-                {/* 6. Asignaciones y Colaboración */}
-                <div className="space-y-3 pt-3 border-t border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-slate-500 uppercase">Colaborativo / Grupo</span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={editingTask?.is_collaborative || false}
-                        onChange={e => setEditingTask({...editingTask, is_collaborative: e.target.checked, assignedUsers: e.target.checked ? [Number(localStorage.getItem('atenea_user_id') || 1)] : []})}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-350 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                    </label>
-                  </div>
-
-                  {editingTask?.is_collaborative && (
-                    <div className="space-y-2 max-h-32 overflow-y-auto p-3 bg-slate-50 rounded-xl border border-slate-100 custom-scrollbar">
-                      <p className="text-[8px] font-bold text-slate-400 uppercase mb-2">Seleccionar Compañeros de Equipo</p>
-                      {usersList.map((u: any) => (
-                        <label key={u.id} className="flex items-center gap-2 cursor-pointer py-1">
-                          <input 
-                            type="checkbox"
-                            checked={(editingTask.assignedUsers || []).includes(u.id)}
-                            onChange={e => {
-                              const checked = e.target.checked;
-                              const currentList = editingTask.assignedUsers || [];
-                              const newList = checked ? [...currentList, u.id] : currentList.filter(id => id !== u.id);
-                              setEditingTask({...editingTask, assignedUsers: newList});
-                            }}
-                            className="rounded text-primary focus:ring-primary border-slate-200"
+                {/* 5 y 6. Justificación y Selección de Compañeros en Paralelo según Visibilidad */}
+                {(() => {
+                  const showJustification = editingTask?.id && originalPriority !== null && Number(editingTask.prioridad) === 10 && originalPriority !== 10;
+                  const showCollaborative = editingTask?.is_collaborative;
+                  if (!showJustification && !showCollaborative) return null;
+                  
+                  return (
+                    <div className={`grid gap-4 pt-3 border-t border-slate-100 ${showJustification && showCollaborative ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                      {showJustification && (
+                        <div className="space-y-1 animate-in fade-in duration-300">
+                          <label className="text-[9px] font-black text-rose-500 uppercase tracking-wider">Justificación del Cambio (Requerida)</label>
+                          <textarea
+                            value={justificationText}
+                            onChange={e => setJustificationText(e.target.value)}
+                            placeholder="Explica brevemente por qué estás cambiando la prioridad a CRÍTICA..."
+                            className="w-full p-2 rounded-xl bg-rose-50/20 border border-rose-200 text-[10px] font-bold text-slate-700 outline-none focus:border-rose-500 h-[80px] resize-none"
+                            required
                           />
-                          <div className="flex-1 flex justify-between items-center text-[10px]">
-                            <span className="font-bold text-slate-700">{u.nombre}</span>
-                            {u.isLocked && (
-                              <span className="text-[7px] bg-red-150 text-red-600 px-1.5 py-0.5 rounded font-black border border-red-200/50 uppercase">Ocupado</span>
-                            )}
+                        </div>
+                      )}
+                      {showCollaborative && (
+                        <div className="space-y-1 animate-in fade-in duration-300">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Seleccionar Compañeros</label>
+                          <div className="space-y-1.5 max-h-[80px] overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100 custom-scrollbar">
+                            {usersList.map((u: any) => (
+                              <label key={u.id} className="flex items-center gap-2 cursor-pointer py-0.5">
+                                <input 
+                                  type="checkbox"
+                                  checked={(editingTask.assignedUsers || []).includes(u.id)}
+                                  onChange={e => {
+                                    const checked = e.target.checked;
+                                    const currentList = editingTask.assignedUsers || [];
+                                    const newList = checked ? [...currentList, u.id] : currentList.filter(id => id !== u.id);
+                                    setEditingTask({...editingTask, assignedUsers: newList});
+                                  }}
+                                  className="rounded text-primary focus:ring-primary border-slate-200 h-3 w-3"
+                                />
+                                <div className="flex-1 flex justify-between items-center text-[9px]">
+                                  <span className="font-bold text-slate-700">{u.nombre}</span>
+                                  {u.isLocked && (
+                                    <span className="text-[6px] bg-red-150 text-red-600 px-1 py-0.2 rounded font-black border border-red-200/50 uppercase">Ocupado</span>
+                                  )}
+                                </div>
+                              </label>
+                            ))}
                           </div>
-                        </label>
-                      ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
-                <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl">
+                <button type="submit" className="w-full py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl">
                   {editingTask?.id ? 'Actualizar Tarea' : 'Añadir al Backlog'}
                 </button>
               </form>
@@ -982,7 +1199,7 @@ export default function ConfigView2() {
                   )}
                 </div>
 
-                <button 
+                  <button 
                   onClick={() => { addBloque(); setIsExcepcionModalOpen(false); }} 
                   className="w-full py-4 bg-accent text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-accent-hover transition-all shadow-xl shadow-accent/20 flex items-center justify-center gap-2"
                 >
@@ -993,7 +1210,211 @@ export default function ConfigView2() {
           </div>
         )}
       </AnimatePresence>
- 
+
+      {/* NUEVO MODAL DE TAREA IA (DESDE CERO) */}
+      <AnimatePresence>
+        {isCustomAiModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-white/20">
+              {customAiStep === 'input' && (
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                    <Wand2 size={16} className="text-emerald-600" /> Nueva Tarea IA
+                  </h3>
+                  <button onClick={() => setIsCustomAiModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors">✕</button>
+                </div>
+              )}
+
+              <div className="p-6 space-y-6">
+                {customAiStep === 'input' ? (
+                  <>
+                    {/* 1. Actividad / Descripción */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <span>{customAiMode === 'rayo' ? '⚡' : '🤖'}</span> Actividad / Descripción
+                      </label>
+
+                      {/* Selector de modo Rayo / Bot */}
+                      <div className="flex bg-slate-100 p-1 rounded-xl gap-1 mb-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomAiMode('rayo');
+                            const options = getDropdownOptions();
+                            setCustomAiSelectedOption(options[0] || '');
+                          }}
+                          className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${customAiMode === 'rayo' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                          <Zap size={10} className="text-amber-500" /> Tarea Rápida
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomAiMode('bot');
+                            setCustomAiSelectedOption('Otro');
+                            setCustomAiTaskText('');
+                          }}
+                          className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${customAiMode === 'bot' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                          <Bot size={10} className="text-emerald-500" /> Asistente IA
+                        </button>
+                      </div>
+
+                      {customAiMode === 'rayo' ? (
+                        <select
+                          value={customAiSelectedOption}
+                          onChange={e => setCustomAiSelectedOption(e.target.value)}
+                          className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-emerald-600 mb-2 font-sans"
+                        >
+                          {getDropdownOptions().map(opt => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <textarea 
+                          value={customAiTaskText} 
+                          onChange={e => setCustomAiTaskText(e.target.value)}
+                          placeholder="Describe tu tarea para que la IA la procese (ej: Analizar tendencias de focos por 2 horas)..."
+                          className="w-full p-4 rounded-xl bg-slate-50 border border-slate-100 text-xs font-bold text-slate-700 outline-none focus:border-emerald-600 h-24 resize-none"
+                          required
+                        />
+                      )}
+                    </div>
+
+                    {/* 2. Área / Categoría */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase">Área / Categoría</label>
+                      <select 
+                        value={customAiArea} 
+                        onChange={e => setCustomAiArea(e.target.value)}
+                        className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-emerald-600"
+                      >
+                        <option value="Operativo">Operativo</option>
+                        <option value="Monitoreo">Monitoreo</option>
+                        <option value="Tendencias">Tendencias</option>
+                        <option value="Escuelita">Escuelita</option>
+                        <option value="Calidad">Calidad</option>
+                      </select>
+                    </div>
+
+                    {/* 3. Colaborativo / Grupo */}
+                    <div className="space-y-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-slate-500 uppercase">Colaborativo / Grupo</span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={customAiIsCollab}
+                            onChange={e => setCustomAiIsCollab(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-350 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                        </label>
+                      </div>
+
+                      {customAiIsCollab && (
+                        <div className="space-y-2 max-h-32 overflow-y-auto p-3 bg-slate-50 rounded-xl border border-slate-100 custom-scrollbar">
+                          <p className="text-[8px] font-bold text-slate-400 uppercase mb-2">Seleccionar Compañeros de Equipo</p>
+                          {usersList.map((u: any) => (
+                            <label key={u.id} className="flex items-center gap-2 cursor-pointer py-1">
+                              <input 
+                                type="checkbox"
+                                checked={customAiAssignedUsers.includes(u.id)}
+                                onChange={() => {
+                                  const newList = customAiAssignedUsers.includes(u.id)
+                                    ? customAiAssignedUsers.filter(id => id !== u.id)
+                                    : [...customAiAssignedUsers, u.id];
+                                  setCustomAiAssignedUsers(newList);
+                                }}
+                                className="rounded border-slate-350 text-emerald-600 focus:ring-emerald-600"
+                              />
+                              <span className="text-[10px] font-bold text-slate-600">{u.nombre}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 4. Botón de Enviar */}
+                    <button 
+                      onClick={handleAnalyzeCustomAiTask}
+                      disabled={isProcessing || (customAiSelectedOption === 'Otro' && !customAiTaskText.trim())}
+                      className="w-full py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-slate-900/10 flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      {isProcessing ? 'Procesando con IA...' : 'Analizar con IA'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="-mx-6 -mt-6 bg-emerald-600 p-8 text-white relative">
+                      <div className="absolute top-0 right-0 p-8 opacity-10">
+                        <Wand2 size={120} className="rotate-12" />
+                      </div>
+                      <div className="flex items-center gap-4 mb-2">
+                        <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
+                          <Wand2 size={24} />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-black uppercase tracking-tighter">Asistente IA</h2>
+                          <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest opacity-80">Procesamiento inteligente de tareas</p>
+                        </div>
+                      </div>
+                      <button onClick={() => setIsCustomAiModalOpen(false)} className="absolute top-6 right-6 w-10 h-10 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-all text-white">
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-4 pt-6">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Actividades sugeridas por la IA:</p>
+                      
+                      <div className="bg-[#F8FAFC] p-6 rounded-[28px] border border-slate-100 flex flex-col gap-4 relative shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[8px] font-black px-2.5 py-1 rounded-full uppercase text-center bg-emerald-50 text-emerald-600 border border-emerald-100">
+                            {customAiPreviewResult?.rol_ejecutante || 'Calidad Fabrica'}
+                          </span>
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest bg-slate-100/80 px-2.5 py-1 rounded-md">
+                            Complejidad: {customAiPreviewResult?.complejidad || 2}
+                          </span>
+                        </div>
+
+                        <h4 className="text-xs font-black text-slate-800 leading-relaxed pr-6">{customAiPreviewResult?.actividad}</h4>
+
+                        <div className="flex items-center gap-4 pt-3 border-t border-slate-100/50">
+                          <span className="text-[8px] font-black text-slate-400 uppercase">
+                            Área: {customAiPreviewResult?.area}
+                          </span>
+                          <span className="text-[8px] font-black text-slate-400 uppercase">
+                            Prioridad: {customAiPreviewResult?.prioridad === 10 ? 'Crítica' : customAiPreviewResult?.prioridad === 7 ? 'Alta' : customAiPreviewResult?.prioridad === 4 ? 'Media' : 'Baja'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-4 pt-4">
+                        <button 
+                          onClick={() => setCustomAiStep('input')} 
+                          className="flex-1 py-4 border border-slate-200 hover:bg-slate-50 text-slate-450 hover:text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all animate-in duration-200"
+                        >
+                          Reintentar
+                        </button>
+                        <button 
+                          onClick={handleConfirmCustomAiTask}
+                          disabled={isProcessing}
+                          className="flex-[2] py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-3"
+                        >
+                          {isProcessing ? 'Guardando...' : 'Agregar todo al backlog'}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* MODAL DE ASISTENTE IA */}
       <AnimatePresence>
         {isAiModalOpen && (
@@ -1304,7 +1725,12 @@ export default function ConfigView2() {
                           <Clock size={40} className="text-primary" />
                         </div>
                         <span className="text-[10px] font-black text-primary uppercase tracking-widest mb-1 relative z-10">Jornada Efectiva</span>
-                        <span className="text-2xl font-black text-primary relative z-10">100% Capacidad</span>
+                        <span className="text-2xl font-black text-primary relative z-10">
+                          {availableHours > 0 ? Math.max(0, Math.round((remainingHours / availableHours) * 100)) : 0}% Disponible
+                        </span>
+                        <span className="text-[9px] font-bold text-primary/70 relative z-10 mt-1 uppercase tracking-wider">
+                          {remainingHours.toFixed(1)}h Libres / {availableHours.toFixed(1)}h Totales
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1563,37 +1989,15 @@ export default function ConfigView2() {
             </div>
           </div>
           
-          {/* Split Button para Crear Tarea e IA */}
-          <div className="relative flex items-center bg-primary rounded-xl shadow-lg shadow-primary/20">
+          {/* Botones de Creación */}
+          <div className="flex items-center gap-3">
+            {/* Nuevo botón IA desde cero */}
             <button 
-              onClick={() => { setEditingTask({ prioridad: 4 }); setOriginalPriority(null); setJustificationText(''); setIsModalOpen(true); }}
-              className="px-5 py-3 text-white text-[10px] font-black uppercase tracking-widest hover:bg-primary-soft transition-all rounded-l-xl flex items-center gap-2 border-r border-white/20"
+              onClick={openCustomAiModal}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-emerald-600/20"
             >
-              <Plus size={14} /> Nueva Tarea
+              <Wand2 size={14} /> Nueva Tarea IA
             </button>
-            <button 
-              onClick={() => setIsButtonDropdownOpen(!isButtonDropdownOpen)}
-              className="p-3 text-white hover:bg-primary-soft transition-all rounded-r-xl"
-            >
-              <ChevronDown size={14} />
-            </button>
-
-            {isButtonDropdownOpen && (
-              <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                <button 
-                  onClick={() => { setIsButtonDropdownOpen(false); setEditingTask({ prioridad: 4 }); setOriginalPriority(null); setJustificationText(''); setIsModalOpen(true); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-[10px] font-bold text-slate-700 uppercase flex items-center gap-2"
-                >
-                  <Plus size={12} className="text-slate-400" /> Crear Manual
-                </button>
-                <button 
-                  onClick={() => { setIsButtonDropdownOpen(false); setIsAiModalOpen(true); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-[10px] font-bold text-slate-700 uppercase flex items-center gap-2"
-                >
-                  <Wand2 size={12} className="text-emerald-500" /> Asistente IA
-                </button>
-              </div>
-            )}
           </div>
         </div>
 

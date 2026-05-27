@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { BookOpen, ShieldAlert, RefreshCw, Brain, Clock, Lock, UserCheck, CheckCircle2, ChevronRight, FileText } from 'lucide-react';
+import { 
+  BookOpen, ShieldAlert, RefreshCw, Clock, Lock, 
+  UserCheck, CheckCircle2, AlertCircle, Coffee, RotateCcw
+} from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function RulesView() {
@@ -8,7 +11,6 @@ export default function RulesView() {
   const tabs = [
     { id: 'agenda', label: 'Gestión de Agenda', icon: Clock },
     { id: 'backlog', label: 'Flujo de Backlog', icon: RefreshCw },
-    { id: 'ia', label: 'Políticas e IA', icon: Brain },
   ] as const;
 
   return (
@@ -21,7 +23,7 @@ export default function RulesView() {
           </div>
           <div>
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-wider">Reglas de Operación</h1>
-            <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">Manual operativo y lógica de negocio del módulo</p>
+            <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">Guía rápida de cómo trabajar en el módulo</p>
           </div>
         </div>
       </div>
@@ -58,72 +60,86 @@ export default function RulesView() {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6"
             >
-              {/* Rule 1 */}
-              <div className="latam-card !p-6 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-4">
+              {/* Rule 1: Control de Jornada Abierta */}
+              <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-start gap-4">
-                  <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl">
-                    <Lock size={20} />
+                  <div className="p-3 bg-red-50 text-red-600 rounded-2xl">
+                    <Lock size={22} />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Bloqueo por Jornadas Abiertas</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase">Gobernanza de Tiempos</p>
-                    <p className="text-sm text-slate-600 leading-relaxed pt-2">
-                      No es posible planificar ni iniciar la agenda de hoy o de días futuros si existe alguna jornada de trabajo anterior sin cerrar. El sistema requiere que el usuario justifique las desviaciones del día pendiente y ejecute el <strong>Cierre de Jornada</strong> correspondiente antes de avanzar.
+                  <div className="flex-1 space-y-2">
+                    <h3 className="text-md font-black text-slate-800 uppercase tracking-wider">Control de Jornada</h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      Para poder iniciar tu día de trabajo actual o planificar actividades futuras, <strong>debes cerrar la jornada del día anterior</strong>. El sistema requiere que completes tu cierre diario antes de avanzar.
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Rule 2 */}
-              <div className="latam-card !p-6 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
-                    <Clock size={20} />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Tiempos de Duración por Prioridad</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase">Estándar Operativo</p>
-                    <p className="text-sm text-slate-600 leading-relaxed pt-2">
-                      Al planificar, cada actividad toma una duración estimada por defecto que depende de su nivel de prioridad:
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
-                      <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-center">
-                        <span className="block text-[8px] font-black text-red-700 uppercase">CRÍTICA</span>
-                        <span className="text-lg font-black text-red-950">120m</span>
-                        <span className="block text-[8px] text-red-500 font-bold uppercase mt-0.5">(2.0 Horas)</span>
-                      </div>
-                      <div className="p-3 bg-orange-50 border border-orange-100 rounded-xl text-center">
-                        <span className="block text-[8px] font-black text-orange-700 uppercase">ALTA</span>
-                        <span className="text-lg font-black text-orange-950">90m</span>
-                        <span className="block text-[8px] text-orange-500 font-bold uppercase mt-0.5">(1.5 Horas)</span>
-                      </div>
-                      <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-center">
-                        <span className="block text-[8px] font-black text-amber-700 uppercase">MEDIA</span>
-                        <span className="text-lg font-black text-amber-950">60m</span>
-                        <span className="block text-[8px] text-amber-500 font-bold uppercase mt-0.5">(1.0 Hora)</span>
-                      </div>
-                      <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-center">
-                        <span className="block text-[8px] font-black text-emerald-700 uppercase">BAJA</span>
-                        <span className="text-lg font-black text-emerald-950">30m</span>
-                        <span className="block text-[8px] text-emerald-500 font-bold uppercase mt-0.5">(0.5 Horas)</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Rule 3 */}
-              <div className="latam-card !p-6 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-4">
+              {/* Rule 2: Reapertura de Turno */}
+              <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
-                    <ShieldAlert size={20} />
+                    <RotateCcw size={22} />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Control de Saturación</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase">Optimización de Capacidad</p>
-                    <p className="text-sm text-slate-600 leading-relaxed pt-2">
-                      La agenda calcula en tiempo real la <strong>Jornada Efectiva</strong> restando reuniones fijas, incidencias y bloques no disponibles del día. Si la suma de las duraciones de las tareas supera este tiempo útil, el sistema emitirá una alerta visual de saturación y bloqueará la generación automática de la agenda para evitar sobrecarga operativa.
+                  <div className="flex-1 space-y-2">
+                    <h3 className="text-md font-black text-slate-800 uppercase tracking-wider">Reapertura de Turno</h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      Si cerraste tu turno por error, puedes usar el botón de <strong>"Reabrir Turno"</strong>. Para hacerlo, deberás ingresar obligatoriamente una justificación breve que explique el motivo.
                     </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rule 3: Almuerzo Protegido */}
+              <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-6 hover:shadow-md transition-shadow">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+                    <Coffee size={22} />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <h3 className="text-md font-black text-slate-800 uppercase tracking-wider">Almuerzo Protegido</h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      Tu hora de almuerzo está totalmente protegida por ley:
+                    </p>
+                    <ul className="space-y-2 text-xs text-slate-600 bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                      <li className="flex gap-2">
+                        <span className="text-emerald-500 font-bold">•</span>
+                        <span><strong>No cuenta como fuga operativa:</strong> Es un descanso y no afecta tu desempeño en los reportes.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-emerald-500 font-bold">•</span>
+                        <span><strong>Ratio de foco seguro:</strong> Tus métricas de efectividad no se verán penalizadas por el tiempo de almuerzo.</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rule 4: Tareas Críticas y Justificaciones */}
+              <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-6 hover:shadow-md transition-shadow">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl">
+                    <ShieldAlert size={22} />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <h3 className="text-md font-black text-slate-800 uppercase tracking-wider">Reglas para Actividades Críticas</h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      Las tareas de prioridad máxima (Críticas) tienen controles específicos para asegurar tu concentración:
+                    </p>
+                    <ul className="space-y-2 text-xs text-slate-600 bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                      <li className="flex gap-2">
+                        <span className="text-rose-500 font-bold">•</span>
+                        <span><strong>Límite de 1 tarea activa:</strong> Solo se permite tener una tarea Crítica activa a la vez. Para iniciar otra, debes resolver la actual o cambiar su estado.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-rose-500 font-bold">•</span>
+                        <span><strong>Justificación de prioridad:</strong> Cambiar o crear una tarea en estado Crítica requiere que agregues una explicación breve de la urgencia.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-rose-500 font-bold">•</span>
+                        <span><strong>Justificación por descarte:</strong> Si dejas una tarea agendada sin completar al final de la jornada, deberás ingresar el motivo del incumplimiento al cerrar el día.</span>
+                      </li>
+                    </ul>
                   </div>
                 </div>
               </div>
@@ -136,114 +152,52 @@ export default function RulesView() {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6"
             >
-              {/* Rule 1 */}
-              <div className="latam-card !p-6 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-4">
+              {/* Rule 1: Privacidad */}
+              <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-sky-50 text-sky-600 rounded-2xl">
-                    <UserCheck size={20} />
+                    <UserCheck size={22} />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Restricción de Visibilidad</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase">Seguridad y Enfoque</p>
-                    <p className="text-sm text-slate-600 leading-relaxed pt-2">
-                      Los operadores solo pueden visualizar las tareas que ellos mismos agregan al Backlog (tareas individuales). Las tareas colaborativas o grupales solo serán visibles si han sido invitados explícitamente agregándolos en los usuarios asignados del card.
+                  <div className="flex-1 space-y-2">
+                    <h3 className="text-md font-black text-slate-800 uppercase tracking-wider">Quién puede ver las tareas</h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      El Backlog está diseñado para tu organización personal:
                     </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Rule 2 */}
-              <div className="latam-card !p-6 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl">
-                    <RefreshCw size={20} />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Ciclo de Sincronización del Backlog</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase">Integración en Tiempo Real</p>
-                    <p className="text-sm text-slate-600 leading-relaxed pt-2">
-                      El backlog y la agenda diaria están completamente sincronizados:
-                    </p>
-                    <ul className="space-y-3 pt-3">
-                      <li className="flex gap-2 text-sm text-slate-600">
-                        <ChevronRight size={16} className="text-primary flex-shrink-0 mt-0.5" />
-                        <span><strong>Al Planificar:</strong> Agregar una tarea del backlog a la agenda cambia su estado en el Kanban a <strong>"Agendado"</strong> (mostrando la fecha de agenda y estado en tiempo real).</span>
-                      </li>
-                      <li className="flex gap-2 text-sm text-slate-600">
-                        <ChevronRight size={16} className="text-primary flex-shrink-0 mt-0.5" />
-                        <span><strong>Al Desagendar:</strong> Si eliminas una tarea programada de la agenda, su estado del backlog regresa a <strong>"Pendiente"</strong> para poder ser planificada otro día.</span>
-                      </li>
-                      <li className="flex gap-2 text-sm text-slate-600">
-                        <ChevronRight size={16} className="text-primary flex-shrink-0 mt-0.5" />
-                        <span><strong>Al Cerrar la Jornada:</strong> Las tareas completadas exitosamente pasan a <strong>"Terminada"</strong> y se ocultan del Kanban activo para guardarse en el <strong>Archivo de Backlog</strong>. Las tareas no realizadas regresan a <strong>"Pendiente"</strong>.</span>
+                    <ul className="space-y-2 text-xs text-slate-600 bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                      <li className="flex gap-2">
+                        <span className="text-sky-500 font-bold">•</span>
+                        <span>Sólo tú puedes ver las tareas que creaste o en las que fuiste asignado como responsable o colaborador.</span>
                       </li>
                     </ul>
                   </div>
                 </div>
               </div>
-            </motion.div>
-          )}
 
-          {activeTab === 'ia' && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-6"
-            >
-              {/* Rule 1 */}
-              <div className="latam-card !p-6 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-4">
+              {/* Rule 2: Sincronización */}
+              <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-                    <Brain size={20} />
+                    <RefreshCw size={22} />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Inmutabilidad del Asistente de IA</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase">Consistencia Cognitiva</p>
-                    <p className="text-sm text-slate-600 leading-relaxed pt-2">
-                      Los campos analizados y propuestos por el <strong>Asistente IA</strong> (Título, Prioridad y Complejidad) no son editables de forma directa en el modal del asistente. El usuario sólo puede cambiar el Área. Esto garantiza la integridad y consistencia del análisis de complejidad del modelo antes de guardar.
+                  <div className="flex-1 space-y-2">
+                    <h3 className="text-md font-black text-slate-800 uppercase tracking-wider">Flujo de Estados</h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      Las tareas cambian de estado de forma automática según tus acciones en la agenda:
                     </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Rule 2 */}
-              <div className="latam-card !p-6 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
-                    <FileText size={20} />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Justificación de Desviaciones y Cambios</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase">Trazabilidad Operativa</p>
-                    <p className="text-sm text-slate-600 leading-relaxed pt-2 font-medium">
-                      El sistema aplica auditorías estrictas en las siguientes situaciones:
-                    </p>
-                    <ul className="space-y-2 pt-2 text-sm text-slate-600">
-                      <li className="flex gap-2">
-                        <CheckCircle2 size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
-                        <span><strong>Cambio de Prioridad:</strong> Editar la prioridad de una tarea del backlog requiere que el usuario ingrese un comentario que justifique el cambio.</span>
-                      </li>
-                      <li className="flex gap-2">
-                        <CheckCircle2 size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
-                        <span><strong>Desviación de Agenda:</strong> Marcar una tarea planificada como "No Realizado" o dejarla sin completar al cerrar el día requiere ingresar una justificación obligatoria.</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              {/* Rule 3 */}
-              <div className="latam-card !p-6 bg-white border border-slate-100 shadow-sm rounded-3xl space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-red-50 text-red-600 rounded-2xl">
-                    <ShieldAlert size={20} />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Límite de Actividades Críticas</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase">Enfoque Estratégico</p>
-                    <p className="text-sm text-slate-600 leading-relaxed pt-2">
-                      Para garantizar el enfoque estratégico y proteger la jornada, el sistema solo permite asignar la prioridad **CRÍTICA** (Valor 10) a una sola actividad en la agenda del día. Las prioridades críticas conllevan mayor desgaste y atención, por lo que no es posible saturar la planificación con múltiples tareas críticas simultáneas.
-                    </p>
+                    <div className="space-y-3 pt-2 text-xs">
+                      <div className="flex gap-3 items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="px-2 py-0.5 text-[9px] font-black bg-blue-100 text-blue-700 rounded uppercase">Al Agendar</span>
+                        <p className="text-slate-600">Pasa a estado <strong>Agendado</strong> y se programa para el día seleccionado.</p>
+                      </div>
+                      <div className="flex gap-3 items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="px-2 py-0.5 text-[9px] font-black bg-slate-100 text-slate-700 rounded uppercase">Al quitar</span>
+                        <p className="text-slate-600">Si decides no hacerla hoy, regresa a estado <strong>Pendiente</strong> en tu backlog.</p>
+                      </div>
+                      <div className="flex gap-3 items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="px-2 py-0.5 text-[9px] font-black bg-emerald-100 text-emerald-700 rounded uppercase">Al completar</span>
+                        <p className="text-slate-600">Al resolver la tarea, se marca como <strong>Completada</strong> y se archiva de la vista principal.</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

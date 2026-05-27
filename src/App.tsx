@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo, BrainCircuit, Clock } from 'lucide-react';
+import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import HomeView from './components/HomeView';
 import ConfigView2 from './components/ConfigView2';
@@ -12,12 +12,10 @@ import FocusView from './components/FocusView';
 import AgendaView2 from './components/AgendaView2';
 import DashboardView2 from './components/DashboardView2';
 import HistoryView2 from './components/HistoryView2';
-import ProductivityView from './components/ProductivityView';
-import TimeReportView from './components/TimeReportView';
-import RulesView from './components/RulesView';
+import AdminView from './components/AdminView';
 import logoLatam from './assets/logo_latam.png';
 
-type View = 'home' | 'config2' | 'agenda2' | 'agenda_pro' | 'dashboard2' | 'history2' | 'productivity' | 'planilla' | 'rules';
+type View = 'home' | 'config2' | 'agenda2' | 'agenda_pro' | 'dashboard2' | 'history2' | 'admin';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
@@ -51,19 +49,16 @@ export default function App() {
     window.location.reload();
   };
 
+  const isSupervisor = user.role === 'supervisor';
+
   const navItems = [
     { id: 'home', label: 'Inicio', icon: LayoutDashboard },
     { id: 'config2', label: 'Centro de Módulo', icon: Settings },
     { id: 'agenda_pro', label: 'Agenda Pro', icon: ListTodo },
     { id: 'dashboard2', label: 'Dashboard Pro', icon: BarChart3 },
     { id: 'history2', label: 'Historial Pro', icon: History },
-    { id: 'planilla', label: 'Reporte de Tiempos', icon: Clock },
-    { id: 'rules', label: 'Reglas de Negocio', icon: BrainCircuit },
+    ...(isSupervisor ? [{ id: 'admin', label: 'Admin · Equipo', icon: ShieldCheck }] : []),
   ];
-
-  if (user?.role === 'supervisor') {
-    navItems.push({ id: 'productivity', label: 'Productividad Global', icon: BarChart3 });
-  }
 
   return (
     <div className="min-h-screen bg-[#F8F7FF] text-slate-800 flex overflow-hidden">
@@ -212,9 +207,7 @@ export default function App() {
                 />
               )}
               {currentView === 'history2' && <HistoryView2 />}
-              {currentView === 'productivity' && <ProductivityView />}
-              {currentView === 'planilla' && <TimeReportView />}
-              {currentView === 'rules' && <RulesView />}
+              {currentView === 'admin' && <AdminView />}
             </motion.div>
           </AnimatePresence>
         </div>

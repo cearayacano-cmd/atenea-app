@@ -3,521 +3,720 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   BarChart3, CheckCircle, ChevronLeft, ChevronRight, BrainCircuit, 
   Zap, AlertTriangle, TrendingUp, Activity, Target, 
-  Calendar as CalendarIcon, Loader2, Lightbulb, PieChart, Clock, TrendingDown,
-  ShieldCheck, ArrowUpRight, Gauge, ListTodo
+  Calendar as CalendarIcon, Loader2, Lightbulb, PieChart, Clock, 
+  ShieldCheck, ArrowUpRight, Gauge, ListTodo, Users, RefreshCw
 } from 'lucide-react';
 
 interface Task {
   id: number;
+  fecha: string;
   actividad: string;
   prioridad: number;
   completada: number | boolean;
   estado_ejecucion?: string;
+  area?: string;
+  user_id: number;
 }
 
 interface Incidencia {
   id: number;
+  fecha: string;
   descripcion: string;
   hora_inicio: string;
   hora_fin: string;
   tipo: string;
+  user_id: number;
 }
 
-const EXECUTED_STATUSES = ['en espera', 'abierto', 'resuelto', 'terminada', 'despriorizada', 'fallo', 'fallido'];
+interface UserInfo {
+  id: number;
+  nombre: string;
+  email: string;
+  rol: string;
+}
 
 export default function DashboardView2({ selectedDate, setSelectedDate }: {
   selectedDate: string,
   setSelectedDate: (date: string) => void
 }) {
+  const [tab, setTab] = useState<'semanal' | 'mensual'>('semanal');
+  const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [trend, setTrend] = useState<{ 
-    day: string, 
-    percentage: number,
-    critico: number,
-    alto: number,
-    medio: number,
-    date: string
-  }[]>([]);
-  const [backlogDist, setBacklogDist] = useState({ critico: 0, alto: 0, medio: 0, total: 0 });
+  const [usersList, setUsersList] = useState<UserInfo[]>([]);
+  const [isDemoData, setIsDemoData] = useState(false);
+  
+  // Navigation offsets
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, -1 = last week
+  const [monthOffset, setMonthOffset] = useState(0); // 0 = current month, -1 = last month
 
+  // Filters
+  const loggedInUserId = Number(localStorage.getItem('atenea_user_id') || 1);
+  const isSupervisor = loggedInUserId === 1; // carlose.araya@latam.com
+  const [selectedFilterUserId, setSelectedFilterUserId] = useState<string>(isSupervisor ? 'all' : String(loggedInUserId));
+
+  // Fetch users list for supervisor filter
   useEffect(() => {
-    const fetchData = async () => {
+    if (isSupervisor) {
+      fetch('/api/usuarios')
+        .then(res => res.json())
+        .then(data => setUsersList(data))
+        .catch(err => console.error("Error fetching users for dashboard filter:", err));
+    }
+  }, [isSupervisor]);
+
+  // Reset offsets when tab changes
+  useEffect(() => {
+    setWeekOffset(0);
+    setMonthOffset(0);
+  }, [tab]);
+
+  // Calculate Date Ranges
+  const getWeekRange = (offset: number) => {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+    
+    const monday = new Date(today.setDate(diff + (offset * 7)));
+    monday.setHours(0, 0, 0, 0);
+    
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+    friday.setHours(23, 59, 59, 999);
+    
+    return { monday, friday };
+  };
+
+  const getMonthRange = (offset: number) => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth() + offset;
+    
+    const startOfMonth = new Date(year, month, 1);
+    const endOfMonth = new Date(year, month + 1, 0);
+    endOfMonth.setHours(23, 59, 59, 999);
+    
+    return { startOfMonth, endOfMonth };
+  };
+
+  // Fetch metrics based on filters and tab
+  useEffect(() => {
+    const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        const anchorDate = new Date(selectedDate + 'T00:00:00');
-        const currentDay = anchorDate.getDay();
-        const dayOffset = currentDay === 0 ? 6 : currentDay - 1;
-        const currentMonday = new Date(anchorDate);
-        currentMonday.setDate(anchorDate.getDate() - dayOffset);
-        
-        const days5 = [];
-        for (let i = 0; i < 5; i++) {
-          const d = new Date(currentMonday);
-          d.setDate(currentMonday.getDate() + i);
-          days5.push(d.toISOString().split('T')[0]);
+        let startStr = '';
+        let endStr = '';
+
+        if (tab === 'semanal') {
+          const { monday, friday } = getWeekRange(weekOffset);
+          startStr = monday.toISOString().split('T')[0];
+          endStr = friday.toISOString().split('T')[0];
+        } else {
+          const { startOfMonth, endOfMonth } = getMonthRange(monthOffset);
+          startStr = startOfMonth.toISOString().split('T')[0];
+          endStr = endOfMonth.toISOString().split('T')[0];
         }
 
-        const results = await Promise.all(
-          days5.map(async (dateStr) => {
-            const tRes = await fetch(`/api/tareas?fecha=${dateStr}`);
-            const tData = await tRes.json();
-            const dayTasks: Task[] = tData.tasks || [];
-            
-            let pTotal = 0;
-            let pCritico = 0;
-            let pAlto = 0;
-            let pMedio = 0;
+        // Fetch Tasks
+        const userQuery = selectedFilterUserId === 'all' ? 'all' : selectedFilterUserId;
+        const tasksRes = await fetch(`/api/reporte-tiempos?userId=${userQuery}&fechaInicio=${startStr}&fechaFin=${endStr}`);
+        const tasksData = await tasksRes.json();
+        const tasksList = Array.isArray(tasksData.tasks) ? tasksData.tasks : [];
 
-            dayTasks.forEach(t => {
-              const p = Number(t.prioridad) || 0;
-              pTotal += p;
+        // Fetch Incidences
+        const incRes = await fetch(`/api/incidencias?userId=${userQuery === 'all' ? 1 : userQuery}&fechaInicio=${startStr}&fechaFin=${endStr}`);
+        const incList = await incRes.json();
+        const incData = Array.isArray(incList) ? incList : [];
+
+        if (tasksList.length === 0) {
+          setIsDemoData(true);
+          const mockTasks: Task[] = [];
+          const mockIncidencias: Incidencia[] = [];
+
+          if (tab === 'semanal') {
+            const { monday } = getWeekRange(weekOffset);
+            const areas = ['Operativo', 'Monitoreo', 'Tendencias', 'Escuelita', 'Calidad'];
+            const names = [
+              'Revisión de indicadores entregados por RADAR',
+              'Auditoría de llamadas críticas de calidad',
+              'Calibración semanal con LCoach',
+              'Análisis de tendencias de focos operacionales',
+              'Capacitación técnica en Escuelita de Calidad',
+              'Feedback mensual de desempeño',
+              'Monitoreo preventivo de alertas de plataforma',
+              'Planificación estratégica del sprint operacional',
+              'Reunión de alineación de KPIs',
+              'Validación de hipótesis operacionales en conjunto'
+            ];
+
+            for (let i = 0; i < 15; i++) {
+              const dayOffset = i % 5;
+              const tDate = new Date(monday);
+              tDate.setDate(monday.getDate() + dayOffset);
+              const dateStr = tDate.toISOString().split('T')[0];
               
-              const status = (t.estado_ejecucion || 'nuevo').toLowerCase();
-              const isExecuted = !['nuevo', 'pendiente'].includes(status);
-              
-              if (isExecuted) {
-                if (p >= 10) pCritico += p;
-                else if (p >= 7) pAlto += p;
-                else pMedio += p;
-              }
+              mockTasks.push({
+                id: 1000 + i,
+                fecha: dateStr,
+                actividad: names[i % names.length],
+                prioridad: [10, 7, 4, 2][i % 4],
+                completada: i % 3 !== 0 ? 1 : 0,
+                estado_ejecucion: i % 3 !== 0 ? 'resuelto' : 'nuevo',
+                area: areas[i % areas.length],
+                user_id: 1
+              });
+            }
+
+            const tDate1 = new Date(monday);
+            tDate1.setDate(monday.getDate() + 1);
+            mockIncidencias.push({
+              id: 5001,
+              fecha: tDate1.toISOString().split('T')[0],
+              descripcion: 'Incidente de sistema caído',
+              hora_inicio: '10:00',
+              hora_fin: '11:30',
+              tipo: 'Soporte Técnico',
+              user_id: 1
             });
 
-            const hasTasks = dayTasks.length > 0;
-            return {
-              day: new Date(dateStr + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase(),
-              percentage: hasTasks ? (pTotal > 0 ? Math.round(((pCritico + pAlto + pMedio) / pTotal) * 100) : 0) : null,
-              critico: hasTasks ? (pTotal > 0 ? Math.round((pCritico / pTotal) * 100) : 0) : null,
-              alto: hasTasks ? (pTotal > 0 ? Math.round((pAlto / pTotal) * 100) : 0) : null,
-              medio: hasTasks ? (pTotal > 0 ? Math.round((pMedio / pTotal) * 100) : 0) : null,
-              date: dateStr
-            };
-          })
-        );
+            const tDate2 = new Date(monday);
+            tDate2.setDate(monday.getDate() + 3);
+            mockIncidencias.push({
+              id: 5002,
+              fecha: tDate2.toISOString().split('T')[0],
+              descripcion: 'Reunión imprevista de urgencia operativa',
+              hora_inicio: '14:00',
+              hora_fin: '15:15',
+              tipo: 'Reunión Extra',
+              user_id: 1
+            });
 
-        setTrend(results);
-        
-        const dayIdx = results.findIndex(r => r.date === selectedDate);
-        if (dayIdx !== -1) {
-          const res = await fetch(`/api/tareas?fecha=${selectedDate}`);
-          const data = await res.json();
-          setTasks(data.tasks || []);
-          const iRes = await fetch(`/api/incidencias?fecha=${selectedDate}`);
-          setIncidencias(await iRes.json());
+            mockIncidencias.push({
+              id: 5003,
+              fecha: tDate2.toISOString().split('T')[0],
+              descripcion: 'Almuerzo diario',
+              hora_inicio: '13:00',
+              hora_fin: '14:00',
+              tipo: 'Almuerzo',
+              user_id: 1
+            });
+          } else {
+            const { startOfMonth } = getMonthRange(monthOffset);
+            const areas = ['Operativo', 'Monitoreo', 'Tendencias', 'Escuelita', 'Calidad'];
+            const names = [
+              'Revisión de indicadores de datos',
+              'Auditoría mensual LATAM',
+              'Alineación de calibración',
+              'Análisis de focos operacionales',
+              'Capacitación técnica Escuelita',
+              'Monitoreo preventivo RADAR'
+            ];
+
+            for (let i = 0; i < 45; i++) {
+              const dayOffset = i % 20;
+              const tDate = new Date(startOfMonth);
+              tDate.setDate(startOfMonth.getDate() + dayOffset);
+              const dateStr = tDate.toISOString().split('T')[0];
+
+              mockTasks.push({
+                id: 2000 + i,
+                fecha: dateStr,
+                actividad: names[i % names.length],
+                prioridad: [10, 7, 4, 2][i % 4],
+                completada: i % 4 !== 0 ? 1 : 0,
+                estado_ejecucion: i % 4 !== 0 ? 'resuelto' : 'nuevo',
+                area: areas[i % areas.length],
+                user_id: 1
+              });
+            }
+
+            for (let w = 0; w < 4; w++) {
+              const tDate = new Date(startOfMonth);
+              tDate.setDate(startOfMonth.getDate() + (w * 7) + 2);
+              mockIncidencias.push({
+                id: 6000 + w,
+                fecha: tDate.toISOString().split('T')[0],
+                descripcion: `Soporte Semanal Sem. ${w + 1}`,
+                hora_inicio: '09:00',
+                hora_fin: '10:30',
+                tipo: 'Reunión Extra',
+                user_id: 1
+              });
+            }
+          }
+
+          setTasks(mockTasks);
+          setIncidencias(mockIncidencias);
+        } else {
+          setIsDemoData(false);
+          setTasks(tasksList);
+          setIncidencias(incData);
         }
 
-        const bRes = await fetch('/api/backlog');
-        const bData = await bRes.json();
-        const dist = { critico: 0, alto: 0, medio: 0, total: 0 };
-        bData.forEach((t: any) => {
-          if (['pendiente', 'nuevo', 'abierto', 'en espera'].includes(t.status)) {
-            dist.total++;
-            if (t.prioridad >= 10) dist.critico++;
-            else if (t.prioridad >= 7) dist.alto++;
-            else dist.medio++;
-          }
-        });
-        setBacklogDist(dist);
       } catch (err) {
-        console.error(err);
+        console.error("Error loading dashboard data:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
-  }, [selectedDate]);
 
-  const [isApplying, setIsApplying] = useState(false);
-  const [applied, setApplied] = useState(false);
+    fetchDashboardData();
+  }, [tab, weekOffset, monthOffset, selectedFilterUserId]);
 
-  const handleApplyStrategy = async () => {
-    setIsApplying(true);
-    try {
-      // 1. Identificar tareas pendientes de HOY
-      const pendingTasks = tasks.filter(t => 
-        !t.estado_ejecucion || !['terminada', 'despriorizada'].includes(t.estado_ejecucion)
-      );
+  // Data processing helpers
+  const EXECUTED_STATUSES = ['resuelto', 'terminada'];
+  const ACTIVE_STATES = ['nuevo', 'abierto', 'progreso', 'en progreso'];
 
-      // 2. Calcular fecha de mañana
-      const tomorrow = new Date(selectedDate + 'T00:00:00');
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  // 1. General Metrics
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter(t => EXECUTED_STATUSES.includes((t.estado_ejecucion || 'nuevo').toLowerCase())).length;
+  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-      // 3. Inyectar Bloque Estratégico
-      await fetch('/api/tareas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fecha: tomorrowStr,
-          actividad: '🛡️ FOCO PROFUNDO: RECUPERACIÓN ESTRATÉGICA (IA)',
-          prioridad: 3,
-          area: 'ESTRATEGIA',
-          hora_inicio: '08:00',
-          hora_fin: '10:00'
-        })
-      });
+  // 2. Strategic Focus: Weight-based check on Critical (10) and High (7) tasks
+  const strategicTasks = tasks.filter(t => t.prioridad >= 7);
+  const completedStrategicTasks = strategicTasks.filter(t => EXECUTED_STATUSES.includes((t.estado_ejecucion || 'nuevo').toLowerCase())).length;
+  const strategicFocusRate = strategicTasks.length > 0 ? Math.round((completedStrategicTasks / strategicTasks.length) * 100) : 0;
 
-      // 4. Hacer Rollover de pendientes
-      for (const task of pendingTasks) {
-        await fetch('/api/tareas', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fecha: tomorrowStr,
-            actividad: `[ROLLOVER] ${task.actividad}`,
-            prioridad: task.prioridad,
-            area: 'OPERACIONES',
-            hora_inicio: '10:00',
-            hora_fin: '11:00'
-          })
-        });
-      }
+  // 3. Fuga Operativa (Downtime) - Excluimos el Almuerzo por ser un derecho planificado
+  const calculateIncidentalMinutes = () => {
+    return incidencias.reduce((acc, inc) => {
+      if (inc.tipo === 'Almuerzo') return acc;
+      if (!inc.hora_inicio || !inc.hora_fin) return acc;
+      const [h1, m1] = inc.hora_inicio.split(':').map(Number);
+      const [h2, m2] = inc.hora_fin.split(':').map(Number);
+      const diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+      return acc + (diff > 0 ? diff : 0);
+    }, 0);
+  };
+  const totalIncidentalMinutes = calculateIncidentalMinutes();
+  const incidentalHours = (totalIncidentalMinutes / 60).toFixed(1);
 
-      setApplied(true);
-      setTimeout(() => setApplied(false), 3000);
-    } catch (err) {
-      console.error("Error aplicando estrategia pro:", err);
-    } finally {
-      setIsApplying(false);
+  // 4. Area distribution
+  const areasDistribution: Record<string, number> = {};
+  tasks.forEach(t => {
+    const area = t.area || 'Operativo';
+    areasDistribution[area] = (areasDistribution[area] || 0) + 1;
+  });
+
+  // 5. Generate Weekly / Monthly Days lists
+  const getWeeklyTrend = () => {
+    const { monday } = getWeekRange(weekOffset);
+    const dayLabels = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE'];
+    
+    return dayLabels.map((label, idx) => {
+      const targetDate = new Date(monday);
+      targetDate.setDate(monday.getDate() + idx);
+      const dateStr = targetDate.toISOString().split('T')[0];
+      
+      const dayTasks = tasks.filter(t => t.fecha === dateStr);
+      const done = dayTasks.filter(t => EXECUTED_STATUSES.includes((t.estado_ejecucion || 'nuevo').toLowerCase())).length;
+      
+      return {
+        label,
+        dateStr,
+        total: dayTasks.length,
+        done,
+        rate: dayTasks.length > 0 ? Math.round((done / dayTasks.length) * 100) : 0
+      };
+    });
+  };
+
+  const getMonthlyWeeksTrend = () => {
+    const { startOfMonth, endOfMonth } = getMonthRange(monthOffset);
+    
+    // Group into 4 quarters of the month
+    const weeks = [
+      { label: 'Semana 1', start: new Date(startOfMonth), end: new Date(startOfMonth) },
+      { label: 'Semana 2', start: new Date(startOfMonth), end: new Date(startOfMonth) },
+      { label: 'Semana 3', start: new Date(startOfMonth), end: new Date(startOfMonth) },
+      { label: 'Semana 4', start: new Date(startOfMonth), end: new Date(endOfMonth) },
+    ];
+    
+    const daysInMonth = endOfMonth.getDate();
+    weeks[0].end.setDate(startOfMonth.getDate() + Math.floor(daysInMonth / 4) - 1);
+    weeks[1].start.setDate(weeks[0].end.getDate() + 1);
+    weeks[1].end.setDate(weeks[1].start.getDate() + Math.floor(daysInMonth / 4) - 1);
+    weeks[2].start.setDate(weeks[1].end.getDate() + 1);
+    weeks[2].end.setDate(weeks[2].start.getDate() + Math.floor(daysInMonth / 4) - 1);
+    weeks[3].start.setDate(weeks[2].end.getDate() + 1);
+
+    return weeks.map(w => {
+      const sStr = w.start.toISOString().split('T')[0];
+      const eStr = w.end.toISOString().split('T')[0];
+      
+      const wTasks = tasks.filter(t => t.fecha >= sStr && t.fecha <= eStr);
+      const done = wTasks.filter(t => EXECUTED_STATUSES.includes((t.estado_ejecucion || 'nuevo').toLowerCase())).length;
+      
+      return {
+        label: w.label,
+        total: wTasks.length,
+        done,
+        rate: wTasks.length > 0 ? Math.round((done / wTasks.length) * 100) : 0
+      };
+    });
+  };
+
+  // Strategic AI recommendations generator
+  const getStrategicAdvice = () => {
+    const advices = [];
+    if (totalTasks === 0) {
+      return ["No hay datos de actividades planificadas para este periodo. Comienza asignando tareas desde tu agenda."];
+    }
+    
+    // 1. Downtime check
+    if (totalIncidentalMinutes > 480) {
+      advices.push(`⚠️ Fuga operativa acumulada de ${incidentalHours} horas. Se sugiere agrupar reuniones en un solo bloque y evitar fraccionar la jornada.`);
+    } else {
+      advices.push("✅ Buen control de la fuga operativa en este ciclo. Sigue manteniendo los tiempos no operativos acotados.");
+    }
+
+    // 2. Strategic task rate check
+    if (strategicFocusRate < 60) {
+      advices.push("🔴 Alerta de metas: Has completado menos del 60% de tus tareas críticas. Recomendamos agendar máximo 1 tarea crítica al día para asegurar foco.");
+    } else if (strategicFocusRate >= 85) {
+      advices.push("🏆 ¡Disciplina sobresaliente! Has ejecutado con éxito la gran mayoría de tus tareas críticas de alto valor estratégico.");
+    }
+
+    // 3. Category diversification
+    const operativeCount = areasDistribution['Operativo'] || 0;
+    if (operativeCount / totalTasks > 0.7) {
+      advices.push("💡 Sobrecarga táctica detectada: Más del 70% de tus actividades son del área Operativa. Intenta delegar tareas repetitivas o asignar espacio para Tendencias y Estrategia.");
+    }
+
+    return advices;
+  };
+
+  const adviceList = getStrategicAdvice();
+
+  // Range text formatter
+  const getHeaderDateRangeText = () => {
+    if (tab === 'semanal') {
+      const { monday, friday } = getWeekRange(weekOffset);
+      const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' };
+      return `${monday.toLocaleDateString('es-ES', options)} - ${friday.toLocaleDateString('es-ES', options)} (Semana offset: ${weekOffset === 0 ? 'Actual' : weekOffset})`;
+    } else {
+      const { startOfMonth } = getMonthRange(monthOffset);
+      return startOfMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
     }
   };
 
-  const pesoTotal = tasks.reduce((acc, t) => acc + (Number(t.prioridad) || 0), 0);
-  const pesoCompletado = tasks.reduce((acc, t) => {
-    const isExecuted = t.estado_ejecucion && EXECUTED_STATUSES.includes(t.estado_ejecucion);
-    return acc + (isExecuted ? (Number(t.prioridad) || 0) : 0);
-  }, 0);
-  const porcentajeEstrategico = pesoTotal > 0 ? Math.round((pesoCompletado / pesoTotal) * 100) : 0;
-  
-  const workedDays = trend.filter(t => t.percentage !== null);
-  const promedioEstrategicoSemanal = workedDays.length > 0
-    ? Math.round(workedDays.reduce((acc, d) => acc + (d.percentage || 0), 0) / workedDays.length)
-    : 0;
-
-  const totalMinsOp = incidencias.reduce((acc, inc) => {
-    const [h1, m1] = inc.hora_inicio.split(':').map(Number);
-    const [h2, m2] = inc.hora_fin.split(':').map(Number);
-    return acc + ((h2 * 60 + m2) - (h1 * 60 + m1));
-  }, 0);
-  const porcentajeOperativo = Math.round((totalMinsOp / (8 * 60)) * 100);
-
   return (
-    <div className="space-y-10 pb-20 w-full">
-      {/* Header Premium */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="flex items-center gap-4">
+    <div className="space-y-8 pb-16 w-full">
+      {/* Header premium con fondo claro integrado */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white border border-slate-100 p-8 rounded-[36px] shadow-xl shadow-slate-200/20 relative overflow-hidden">
+        <div className="relative z-10 flex items-center gap-4">
           <div className="p-3 bg-primary/10 rounded-2xl text-primary">
-             <BrainCircuit size={28} />
+            <BrainCircuit size={28} />
           </div>
           <div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Dashboard de Inteligencia</h2>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">
-               Análisis Predictivo y Optimización de Jornada
+            <h2 className="text-2xl font-black tracking-tight text-slate-800">Dashboard Pro</h2>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
+              Optimización, Tendencias y Rendimiento de Foco
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-4 bg-white p-3 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/50">
-          <button onClick={() => {
-            const d = new Date(selectedDate + 'T00:00:00'); d.setDate(d.getDate() - 1); setSelectedDate(d.toISOString().split('T')[0]);
-          }} className="p-3 hover:bg-slate-50 rounded-2xl transition-all"><ChevronLeft size={20} /></button>
-          <div className="flex flex-col items-center px-4 border-x border-slate-100">
-             <span className="text-[10px] font-black text-slate-400 uppercase">Fecha de Análisis</span>
-             <span className="text-sm font-black text-slate-800">{selectedDate}</span>
-          </div>
-          <button onClick={() => {
-            const d = new Date(selectedDate + 'T00:00:00'); d.setDate(d.getDate() + 1); setSelectedDate(d.toISOString().split('T')[0]);
-          }} className="p-3 hover:bg-slate-50 rounded-2xl transition-all"><ChevronRight size={20} /></button>
-        </div>
-      </div>
 
-      {/* Lectura Inteligente - Semáforo Operativo */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-         <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/30 group hover:scale-[1.02] transition-all relative overflow-hidden">
-            <div className={`absolute top-4 right-6 w-3 h-3 rounded-full blur-[2px] animate-pulse ${porcentajeEstrategico >= 80 ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)]' : porcentajeEstrategico >= 50 ? 'bg-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.6)]' : 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]'}`} />
-            <div className="flex items-center gap-3 mb-4">
-               <div className="p-2 bg-slate-50 rounded-xl text-slate-400"><CheckCircle size={18} /></div>
-               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lectura del Día</span>
-            </div>
-            <p className="text-sm font-black text-slate-800 leading-tight">
-               {porcentajeEstrategico >= 80 ? 'Ejecución con disciplina estratégica total.' : porcentajeEstrategico >= 50 ? 'Equilibrio operativo en progreso.' : 'Enfoque reactivo dominante detectado.'}
-            </p>
-         </div>
-
-         <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/30 group hover:scale-[1.02] transition-all relative overflow-hidden">
-            {/* Lógica de semáforo semanal */}
-            <div className={`absolute top-4 right-6 w-3 h-3 rounded-full blur-[2px] animate-pulse ${promedioEstrategicoSemanal >= 70 ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]'}`} />
-            <div className="flex items-center gap-3 mb-4">
-               <div className="p-2 bg-slate-50 rounded-xl text-slate-400"><TrendingUp size={18} /></div>
-               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lectura de la Semana</span>
-            </div>
-            <p className="text-sm font-black text-slate-800 leading-tight">
-               Semana con {promedioEstrategicoSemanal < 50 ? 'riesgo' : 'estabilidad'} estratégica.
-               <span className="block text-[10px] text-slate-400 mt-1">Promedio: {promedioEstrategicoSemanal}%</span>
-            </p>
-         </div>
-
-         <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/30 group hover:scale-[1.02] transition-all relative overflow-hidden">
-            <div className="absolute top-4 right-6 w-3 h-3 rounded-full blur-[2px] bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)]" />
-            <div className="flex items-center gap-3 mb-4">
-               <div className="p-2 bg-slate-50 rounded-xl text-slate-400"><Activity size={18} /></div>
-               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Reincidencia</span>
-            </div>
-            <p className="text-sm font-black text-slate-800 leading-tight">
-               Sin tareas estratégicas repetitivas detectadas.
-            </p>
-         </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Main Analytics Card */}
-        <motion.div 
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="lg:col-span-8 bg-white rounded-[56px] p-12 text-slate-900 relative overflow-hidden shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)] border border-slate-100"
-        >
-          <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-[120px] -mr-48 -mt-48" />
-          
-          <div className="relative z-10 space-y-12">
-             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                   <div className="p-4 bg-primary/10 rounded-3xl backdrop-blur-xl">
-                      <Gauge size={32} className="text-primary" />
-                   </div>
-                   <h3 className="text-2xl font-black tracking-tight">Estado de Carga Operativa</h3>
-                </div>
-                <div className="px-6 py-2 bg-[#99CC33]/20 border border-[#99CC33]/30 rounded-full text-[#99CC33] text-[10px] font-black uppercase tracking-widest">
-                   Optimizado v2.0
-                </div>
-             </div>
-
-             <div className="flex flex-col gap-12">
-                {/* Fila Superior: Estadísticas y KPIs rápidos */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                   <div className="relative">
-                      <span className="text-8xl font-black leading-none tracking-tighter">{porcentajeOperativo}%</span>
-                      <span className="text-xs font-black text-slate-500 uppercase tracking-widest block mt-4">Fuga Operativa Detectada</span>
-                   </div>
-                   <div className="flex flex-col justify-center gap-4">
-                      <div className="flex items-center gap-4 p-5 bg-slate-50 rounded-3xl border border-slate-100 group hover:bg-slate-100 transition-all">
-                         <div className="p-2 bg-[#FFE017]/20 rounded-xl text-amber-600"><Clock size={20} /></div>
-                         <div>
-                            <p className="text-sm font-black text-slate-900">{Math.floor(totalMinsOp / 60)}h {totalMinsOp % 60}m</p>
-                            <p className="text-[10px] font-bold text-slate-400">Total en incidencias</p>
-                         </div>
-                      </div>
-                   </div>
-                   <div className="flex flex-col justify-center gap-4">
-                      <div className="flex items-center gap-4 p-5 bg-slate-50 rounded-3xl border border-slate-100">
-                         <div className="p-2 bg-primary/10 rounded-xl text-primary"><ShieldCheck size={20} /></div>
-                         <div>
-                            <p className="text-sm font-black text-slate-900">{100 - porcentajeOperativo}%</p>
-                            <p className="text-[10px] font-bold text-slate-400">Capacidad de Foco</p>
-                         </div>
-                      </div>
-                   </div>
-                </div>
-
-                {/* Fila Inferior: Gráfico de Tendencia de ancho completo */}
-                <div className="bg-slate-50 rounded-[40px] p-10 border border-slate-100 flex flex-col">
-                   <div className="flex items-center justify-between mb-10">
-                      <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Tendencia de Ejecución Semanal</h4>
-                      <div className="flex gap-8">
-                         <div className="flex flex-col items-end">
-                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Impacto Promedio</span>
-                            <span className="text-lg font-black text-slate-900">{promedioEstrategicoSemanal}%</span>
-                         </div>
-                         <div className="flex flex-col items-end">
-                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Pérdida Acumulada</span>
-                            <span className="text-lg font-black text-amber-500">12h 45m</span>
-                         </div>
-                      </div>
-                   </div>
-                   
-                   <div className="flex items-end justify-between gap-6 h-64">
-                       {trend.map((t, i) => (
-                         <div key={i} className="flex-1 flex flex-col items-center gap-4 group cursor-help">
-                            <div className="relative w-full flex items-end justify-center h-52 bg-slate-100/50 rounded-3xl border border-slate-200/30 overflow-hidden mb-2 shadow-inner group-hover:bg-slate-100 transition-all">
-                               {/* Fondo de capacidad */}
-                               <div className="absolute inset-0 bg-slate-200/10 z-0" />
-                               
-                               {t.percentage === null ? (
-                                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 bg-slate-100/30">
-                                   <span className="text-lg font-black text-slate-300">N/L</span>
-                                   <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">No Trabajado</span>
-                                 </div>
-                               ) : (
-                                 <>
-                                   {/* Barra Stacked por Prioridad */}
-                                   <div 
-                                     style={{ height: `${Math.max(2, t.percentage)}%` }} 
-                                     className="w-full max-w-[54px] transition-all duration-1000 ease-out z-10 relative flex flex-col-reverse rounded-t-xl overflow-hidden shadow-2xl"
-                                   >
-                                      {/* Segmento Medio/Bajo */}
-                                      <div 
-                                        style={{ height: `${(t.medio / t.percentage) * 100}%` }}
-                                        className="w-full bg-gradient-to-t from-slate-400 to-slate-300 flex items-center justify-center text-[8px] font-black text-white"
-                                      >
-                                        {t.medio > 10 && `${t.medio}%`}
-                                      </div>
-                                      {/* Segmento Alto */}
-                                      <div 
-                                        style={{ height: `${(t.alto / t.percentage) * 100}%` }}
-                                        className="w-full bg-gradient-to-t from-amber-500 to-amber-400 border-t border-white/20 flex items-center justify-center text-[8px] font-black text-white"
-                                      >
-                                        {t.alto > 10 && `${t.alto}%`}
-                                      </div>
-                                      {/* Segmento Crítico */}
-                                      <div 
-                                        style={{ height: `${(t.critico / t.percentage) * 100}%` }}
-                                        className="w-full bg-gradient-to-t from-red-600 to-red-500 border-t border-white/20 flex items-center justify-center text-[8px] font-black text-white"
-                                      >
-                                        {t.critico > 10 && `${t.critico}%`}
-                                      </div>
-                                   </div>
-
-                                   {/* Indicador de porcentaje total flotante */}
-                                   <div className="absolute top-4 text-[10px] font-black text-slate-400 opacity-40">
-                                      {t.percentage}%
-                                   </div>
-                                 </>
-                               )}
-                            </div>
-                            <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">{t.day}</span>
-                         </div>
-                       ))}
-                    </div>
-                </div>
-              </div>
-
-              {/* Gráfico de Backlog por Prioridad */}
-              <div className="mt-12 bg-slate-50/30 rounded-[40px] p-10 border border-slate-100/50">
-                 <div className="flex items-center justify-between mb-8">
-                    <div>
-                       <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Distribución de Backlog Vivo</h4>
-                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Carga acumulada por nivel de criticidad</p>
-                    </div>
-                    <div className="px-4 py-2 bg-white rounded-2xl border border-slate-100 text-xs font-black text-primary">
-                       {backlogDist.total} TAREAS TOTALES
-                    </div>
-                 </div>
-
-                 <div className="flex items-end gap-1 w-full h-12 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 p-1">
-                    {backlogDist.critico > 0 && (
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(backlogDist.critico / backlogDist.total) * 100}%` }}
-                        className="h-full bg-gradient-to-r from-red-600 to-red-500 flex items-center justify-center text-[8px] font-black text-white relative group"
-                      >
-                        {Math.round((backlogDist.critico / backlogDist.total) * 100)}%
-                        <div className="absolute -top-8 bg-red-600 text-white px-2 py-1 rounded text-[8px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">CRÍTICO ({backlogDist.critico})</div>
-                      </motion.div>
-                    )}
-                    {backlogDist.alto > 0 && (
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(backlogDist.alto / backlogDist.total) * 100}%` }}
-                        className="h-full bg-gradient-to-r from-amber-500 to-amber-400 flex items-center justify-center text-[8px] font-black text-white relative group"
-                      >
-                        {Math.round((backlogDist.alto / backlogDist.total) * 100)}%
-                        <div className="absolute -top-8 bg-amber-500 text-white px-2 py-1 rounded text-[8px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">ALTO ({backlogDist.alto})</div>
-                      </motion.div>
-                    )}
-                    {backlogDist.medio > 0 && (
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(backlogDist.medio / backlogDist.total) * 100}%` }}
-                        className="h-full bg-gradient-to-r from-slate-400 to-slate-300 flex items-center justify-center text-[8px] font-black text-white relative group"
-                      >
-                        {Math.round((backlogDist.medio / backlogDist.total) * 100)}%
-                        <div className="absolute -top-8 bg-slate-500 text-white px-2 py-1 rounded text-[8px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">MEDIO/BAJO ({backlogDist.medio})</div>
-                      </motion.div>
-                    )}
-                 </div>
-                 <div className="flex justify-between mt-4">
-                    <div className="flex items-center gap-2">
-                       <div className="w-2 h-2 rounded-full bg-red-500" />
-                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Crítico</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <div className="w-2 h-2 rounded-full bg-amber-500" />
-                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Alto</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <div className="w-2 h-2 rounded-full bg-slate-300" />
-                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Medio/Bajo</span>
-                    </div>
-                 </div>
-              </div>
-           </div>
-        </motion.div>
-
-        {/* Sidebar Insights */}
-        <div className="lg:col-span-4 space-y-8">
-           <motion.div 
-             initial={{ opacity: 0, x: 20 }}
-             animate={{ opacity: 1, x: 0 }}
-             transition={{ delay: 0.2 }}
-             className="bg-white rounded-[48px] p-10 border border-slate-100 shadow-2xl shadow-slate-200/50 relative overflow-hidden"
-           >
-              <div className="flex items-center gap-4 mb-8">
-                 <div className="p-3 bg-primary/10 rounded-2xl text-primary"><Target size={24} /></div>
-                 <h3 className="text-lg font-black text-slate-800">Impacto Estratégico</h3>
-              </div>
-              <div className="space-y-6">
-                 <div className="text-center py-10 bg-slate-50 rounded-[40px] border border-slate-100 shadow-inner">
-                    <span className="text-7xl font-black text-primary leading-none">{porcentajeEstrategico}%</span>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-4">Cumplimiento de Metas</p>
-                 </div>
-                 <div className="flex items-center justify-between px-4">
-                    <div className="flex flex-col">
-                       <span className="text-[9px] font-black text-slate-400 uppercase">Eficiencia</span>
-                       <span className="text-sm font-black text-slate-800">Alta</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                       <span className="text-[9px] font-black text-slate-400 uppercase">Tendencia</span>
-                       <span className="text-sm font-black text-[#7DA81A] flex items-center gap-1">
-                          <TrendingUp size={14} /> +12%
-                       </span>
-                    </div>
-                 </div>
-              </div>
-           </motion.div>
-
-           <motion.div 
-             initial={{ opacity: 0, x: 20 }}
-             animate={{ opacity: 1, x: 0 }}
-             transition={{ delay: 0.3 }}
-             className="bg-amber-500 rounded-[48px] p-10 text-white shadow-2xl shadow-amber-200 relative overflow-hidden group hover:scale-[1.02] transition-all"
-           >
-              <div className="absolute top-0 right-0 p-4 opacity-20"><Zap size={80} /></div>
-              <div className="flex items-center gap-4 mb-6">
-                 <div className="p-3 bg-white/20 rounded-2xl"><Lightbulb size={24} /></div>
-                 <h3 className="text-lg font-black">Sugerencia IA</h3>
-              </div>
-              <p className="text-sm font-bold leading-relaxed mb-6 opacity-90">
-                 Has perdido el 67% de tu mañana en incidencias. Para mañana, bloquea las primeras 3 horas sin reuniones.
-              </p>
-              <button 
-                onClick={handleApplyStrategy}
-                disabled={isApplying || applied}
-                className={`w-full py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 transition-all ${
-                  applied 
-                  ? 'bg-green-500 text-white' 
-                  : 'bg-white text-amber-500 hover:scale-[1.02]'
-                }`}
+        <div className="relative z-10 flex flex-wrap items-center gap-4">
+          {/* Selector de Usuario para Supervisor */}
+          {isSupervisor && (
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-full px-4 py-2 text-[10px] font-bold text-slate-700">
+              <Users size={14} className="text-primary" />
+              <span className="text-slate-400">Filtrar:</span>
+              <select 
+                value={selectedFilterUserId}
+                onChange={e => setSelectedFilterUserId(e.target.value)}
+                className="bg-transparent text-slate-700 outline-none border-none cursor-pointer font-sans font-bold"
               >
-                 {isApplying ? (
-                   <Loader2 className="animate-spin" size={16} />
-                 ) : applied ? (
-                   <>¡Estrategia Aplicada! <CheckCircle size={16} /></>
-                 ) : (
-                   <>Aplicar Estrategia <ArrowUpRight size={16} /></>
-                 )}
-              </button>
-           </motion.div>
+                <option value="all" className="bg-white text-slate-700">Todo el Equipo</option>
+                {usersList.map(u => (
+                  <option key={u.id} value={u.id} className="bg-white text-slate-700">{u.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Toggle Tab Semanal/Mensual */}
+          <div className="flex bg-slate-100 p-1 rounded-full border border-slate-200/50">
+            <button 
+              onClick={() => setTab('semanal')} 
+              className={`px-5 py-2 rounded-full text-[9px] font-black uppercase tracking-wider transition-all ${tab === 'semanal' ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              Semanal
+            </button>
+            <button 
+              onClick={() => setTab('mensual')} 
+              className={`px-5 py-2 rounded-full text-[9px] font-black uppercase tracking-wider transition-all ${tab === 'mensual' ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              Mensual
+            </button>
+          </div>
+
+          {/* Navegador de Fecha */}
+          <div className="flex items-center gap-3 bg-slate-50 px-4 py-1.5 rounded-full border border-slate-100 text-slate-700">
+            <button 
+              onClick={() => tab === 'semanal' ? setWeekOffset(prev => prev - 1) : setMonthOffset(prev => prev - 1)}
+              className="p-1.5 hover:bg-slate-100 rounded-full transition-all"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-[10px] font-black uppercase tracking-wider min-w-[120px] text-center text-slate-700">
+              {getHeaderDateRangeText()}
+            </span>
+            <button 
+              onClick={() => tab === 'semanal' ? setWeekOffset(prev => prev + 1) : setMonthOffset(prev => prev + 1)}
+              className="p-1.5 hover:bg-slate-100 rounded-full transition-all"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
       </div>
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-32 gap-3 text-slate-400">
+          <Loader2 className="animate-spin text-primary" size={40} />
+          <span className="text-[10px] font-black uppercase tracking-widest">Cargando métricas de foco...</span>
+        </div>
+      ) : (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {isDemoData && (
+            <div className="bg-amber-50 border border-amber-200 rounded-3xl p-5 flex items-center justify-between text-amber-800 text-[10px] font-bold uppercase tracking-wider shadow-sm">
+              <span className="flex items-center gap-2">
+                <AlertTriangle size={16} className="text-amber-500 animate-pulse" />
+                Modo Demo: Mostrando datos simulados realistas para ilustrar la visualización de este periodo.
+              </span>
+              <span className="text-[8px] bg-amber-200/50 px-2 py-0.5 rounded font-black text-amber-700">Simulación</span>
+            </div>
+          )}
+          
+          {/* Fila de 4 Indicadores Premium de Foco */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            
+            {/* KPI 1: Progreso General */}
+            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/20 flex items-center justify-between group hover:scale-[1.02] transition-all">
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tareas Completadas</span>
+                <h3 className="text-3xl font-black text-slate-800">{completionRate}%</h3>
+                <p className="text-[9px] font-bold text-slate-400 uppercase">
+                  {completedTasks} de {totalTasks} planificadas
+                </p>
+              </div>
+              <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 relative">
+                <Gauge size={24} className="text-primary" />
+                <svg className="absolute inset-0 w-full h-full -rotate-90">
+                  <circle cx="32" cy="32" r="28" fill="transparent" stroke="#f1f5f9" strokeWidth="4" />
+                  <circle cx="32" cy="32" r="28" fill="transparent" stroke="var(--color-primary, #6366f1)" strokeWidth="4" 
+                    strokeDasharray={175} strokeDashoffset={175 - (175 * completionRate) / 100} />
+                </svg>
+              </div>
+            </div>
+
+            {/* KPI 2: Disciplina Estratégica */}
+            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/20 flex items-center justify-between group hover:scale-[1.02] transition-all">
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Disciplina Crítica</span>
+                <h3 className="text-3xl font-black text-slate-800">{strategicFocusRate}%</h3>
+                <p className="text-[9px] font-bold text-slate-400 uppercase">
+                  {completedStrategicTasks} de {strategicTasks.length} tareas clave
+                </p>
+              </div>
+              <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 relative">
+                <Target size={24} className="text-rose-500" />
+                <svg className="absolute inset-0 w-full h-full -rotate-90">
+                  <circle cx="32" cy="32" r="28" fill="transparent" stroke="#f1f5f9" strokeWidth="4" />
+                  <circle cx="32" cy="32" r="28" fill="transparent" stroke="#f43f5e" strokeWidth="4" 
+                    strokeDasharray={175} strokeDashoffset={175 - (175 * strategicFocusRate) / 100} />
+                </svg>
+              </div>
+            </div>
+
+            {/* KPI 3: Fuga Operativa */}
+            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/20 flex items-center justify-between group hover:scale-[1.02] transition-all">
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fuga Operativa</span>
+                <h3 className="text-3xl font-black text-amber-500">{incidentalHours}h</h3>
+                <p className="text-[9px] font-bold text-slate-400 uppercase">
+                  Perdidas en incidentes
+                </p>
+              </div>
+              <div className="p-4 bg-amber-50 rounded-2xl text-amber-500">
+                <Clock size={28} />
+              </div>
+            </div>
+
+            {/* KPI 4: Ratio de Productividad */}
+            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-xl shadow-slate-200/20 flex items-center justify-between group hover:scale-[1.02] transition-all">
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ratio Foco</span>
+                <h3 className="text-3xl font-black text-emerald-600">
+                  {totalTasks > 0 ? Math.round(((totalTasks - incidencias.filter(i => i.tipo !== 'Almuerzo').length) / totalTasks) * 100) : 100}%
+                </h3>
+                <p className="text-[9px] font-bold text-slate-400 uppercase">
+                  Tareas libres de bloqueos
+                </p>
+              </div>
+              <div className="p-4 bg-emerald-50 rounded-2xl text-emerald-500">
+                <ShieldCheck size={28} />
+              </div>
+            </div>
+          </div>
+
+          {/* Gráfico Principal de Tendencia + Sugerencias IA */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* Gráfico de barras premium (HTML / CSS puro) */}
+            <div className="lg:col-span-2 bg-white rounded-[40px] p-8 border border-slate-100 shadow-xl shadow-slate-200/20 flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">
+                  {tab === 'semanal' ? 'Rendimiento Diario de la Semana' : 'Rendimiento Semanal del Mes'}
+                </h3>
+                <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                  Porcentaje de finalización acumulado por periodo
+                </p>
+              </div>
+
+              {/* Contenedor Gráfico */}
+              <div className="mt-8 flex items-end justify-between gap-6 h-60 px-4 bg-slate-50/50 rounded-[28px] p-6 border border-slate-100 shadow-inner">
+                {tab === 'semanal' ? (
+                  getWeeklyTrend().map((d, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-3 group relative h-full justify-end">
+                      <div className="absolute top-0 text-[9px] font-black text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-0.5 rounded shadow z-30">
+                        {d.done}/{d.total} Tareas ({d.rate}%)
+                      </div>
+
+                      {/* Barra de progreso vertical */}
+                      <div className="w-full max-w-[40px] bg-slate-200 rounded-t-xl overflow-hidden h-40 flex flex-col justify-end relative shadow-inner group-hover:scale-105 transition-all">
+                        <div 
+                          style={{ height: `${d.rate}%` }} 
+                          className="w-full bg-gradient-to-t from-primary to-primary-soft rounded-t-xl transition-all duration-700"
+                        />
+                      </div>
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{d.label}</span>
+                    </div>
+                  ))
+                ) : (
+                  getMonthlyWeeksTrend().map((w, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-3 group relative h-full justify-end">
+                      <div className="absolute top-0 text-[9px] font-black text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-0.5 rounded shadow z-30">
+                        {w.done}/{w.total} Tareas ({w.rate}%)
+                      </div>
+
+                      {/* Barra de progreso vertical */}
+                      <div className="w-full max-w-[50px] bg-slate-200 rounded-t-xl overflow-hidden h-40 flex flex-col justify-end relative shadow-inner group-hover:scale-105 transition-all">
+                        <div 
+                          style={{ height: `${w.rate}%` }} 
+                          className="w-full bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-xl transition-all duration-700"
+                        />
+                      </div>
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{w.label}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Sugerencias e Insights de IA */}
+            <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-xl shadow-slate-200/20 flex flex-col justify-between relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-xl -mr-10 -mt-10" />
+              
+              <div className="space-y-6 relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-primary/10 rounded-xl text-primary">
+                    <Lightbulb size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Sugerencias del Foco IA</h3>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">Basado en datos de este ciclo</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {adviceList.map((adv, idx) => (
+                    <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-[10px] font-bold text-slate-600 leading-relaxed shadow-sm hover:bg-slate-100 transition-all flex gap-3">
+                      <span className="text-primary font-black">#0{idx + 1}</span>
+                      <span>{adv}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[8px] font-black text-slate-400 uppercase tracking-wider">
+                <span>Última simulación</span>
+                <span>En tiempo real</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Distribución de Tareas por Área / Categoría */}
+          <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-xl shadow-slate-200/20">
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-6">
+              Distribución de Foco por Área / Categoría
+            </h3>
+
+            {totalTasks > 0 ? (
+              <div className="space-y-6">
+                {/* Barra acumulada integrada */}
+                <div className="flex items-center gap-1 w-full h-8 rounded-xl overflow-hidden bg-slate-100 p-1 border border-slate-200 shadow-inner">
+                  {Object.entries(areasDistribution).map(([area, count], idx) => {
+                    const pct = Math.round((count / totalTasks) * 100);
+                    const colors = [
+                      'from-primary to-primary-soft',
+                      'from-emerald-600 to-emerald-400',
+                      'from-amber-500 to-amber-400',
+                      'from-rose-500 to-rose-400',
+                      'from-violet-600 to-violet-400'
+                    ];
+                    const grad = colors[idx % colors.length];
+
+                    return (
+                      <motion.div 
+                        key={area}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        className={`h-full bg-gradient-to-r ${grad} flex items-center justify-center text-[8px] font-black text-white relative group cursor-help`}
+                      >
+                        {pct > 5 && `${pct}%`}
+                        <div className="absolute -top-8 bg-slate-800 text-white px-2.5 py-1 rounded text-[8px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 shadow-lg">
+                          {area.toUpperCase()}: {count} Tarea(s)
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+
+                {/* Leyendas con contador */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-2">
+                  {Object.entries(areasDistribution).map(([area, count], idx) => {
+                    const colors = [
+                      'bg-primary',
+                      'bg-emerald-500',
+                      'bg-amber-500',
+                      'bg-rose-500',
+                      'bg-violet-600'
+                    ];
+                    const colorClass = colors[idx % colors.length];
+
+                    return (
+                      <div key={area} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-slate-100 transition-all">
+                        <div className={`w-3 h-3 rounded-full ${colorClass}`} />
+                        <div>
+                          <p className="text-[9px] font-black text-slate-800 uppercase leading-none">{area}</p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">{count} Tarea(s)</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="p-12 text-center text-slate-400 font-bold text-xs uppercase tracking-widest bg-slate-50 rounded-[28px] border border-slate-100">
+                No hay actividades registradas en este periodo para visualizar la distribución por áreas.
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
     </div>
   );
 }

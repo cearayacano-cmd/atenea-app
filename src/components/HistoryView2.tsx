@@ -228,7 +228,7 @@ export default function HistoryView() {
           <p className="text-slate-400 font-bold">No hay registros que coincidan con tu búsqueda.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="flex flex-col gap-3">
           {filteredTasks.map((task, idx) => {
             const taskKey = `${task.actividad}-${task.area}`;
             const isExpanded = expandedTasks.includes(taskKey);
@@ -237,74 +237,68 @@ export default function HistoryView() {
             return (
               <motion.div 
                 key={taskKey}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: idx * 0.03 }}
-                className={`group relative bg-white rounded-[32px] border transition-all duration-500 overflow-hidden cursor-pointer shadow-sm hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-2 ${
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.02 }}
+                className={`group relative bg-white rounded-2xl border transition-all duration-300 overflow-hidden cursor-pointer shadow-sm hover:shadow-md hover:border-slate-350 ${
                    isExpanded ? 'border-primary ring-4 ring-primary/5' : 'border-slate-100'
                 }`}
                 onClick={() => toggleExpand(taskKey)}
               >
-                {/* Fondo sutil de Glassmorphism en el header */}
+                {/* Indicador de prioridad lateral izquierdo */}
                 <div 
-                   className="absolute top-0 left-0 right-0 h-1 transition-colors duration-500" 
+                   className="absolute top-0 bottom-0 left-0 w-1.5 transition-colors duration-500" 
                    style={{ backgroundColor: priority.hex }}
                 />
 
-                <div className="flex flex-col h-full">
-                  {/* Header: Status y Progreso */}
-                  <div className="p-5 flex items-center justify-between bg-slate-50/40 border-b border-slate-50">
-                     <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-sm bg-primary/10 text-primary border border-primary/20`}>
-                           <CheckCircle2 size={20} />
-                        </div>
-                        <div className="flex flex-col">
-                           <span className="text-[10px] font-black text-slate-800 tracking-tight">{task.fechas.length}</span>
-                           <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">Ejecuciones</span>
-                        </div>
-                     </div>
-                     <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase border shadow-sm backdrop-blur-md ${getStatusColor(task.backlog_status || 'resuelto').badge} ${getStatusColor(task.backlog_status || 'resuelto').badgeBorder}`}>
-                        {getStatusColor(task.backlog_status || 'resuelto').label}
-                     </div>
+                <div className="flex flex-col md:flex-row md:items-center justify-between p-4 pl-6 gap-4">
+                  {/* Left part: Icon, executions count and Activity title */}
+                  <div className="flex flex-1 items-center gap-4 min-w-0">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-primary/10 text-primary border border-primary/20 shrink-0">
+                       <CheckCircle2 size={16} />
+                    </div>
+                    
+                    <div className="flex flex-col shrink-0 min-w-[55px]">
+                       <span className="text-xs font-black text-slate-800 tracking-tight leading-none">{task.fechas.length}</span>
+                       <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Eje.</span>
+                    </div>
+
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <h4 className={`text-xs font-black leading-snug truncate transition-colors duration-500 ${isExpanded ? 'text-primary' : 'text-slate-800'}`}>
+                         {task.actividad.split(' - Dia')[0]}
+                      </h4>
+                      <div className="flex items-center gap-2">
+                         <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                            task.completada ? 'bg-emerald-500' : 'bg-amber-500'
+                         }`} />
+                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                            {task.fechas[0] ? `Último: ${task.fechas[0]}` : 'Sin fecha'}
+                         </span>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Body: Actividad */}
-                  <div className="p-6 flex-1 flex flex-col justify-between">
-                     <div className="space-y-4">
-                        <h4 className={`text-sm font-black leading-snug transition-colors duration-500 ${isExpanded ? 'text-primary' : 'text-slate-800'}`}>
-                           {task.actividad.split(' - Dia')[0]}
-                        </h4>
-                        <div className="flex items-center gap-2">
-                           <div className={`w-2 h-2 rounded-full animate-pulse ${
-                              task.completada ? 'bg-emerald-500' : 'bg-amber-500'
-                           }`} />
-                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                              {task.fechas[0] ? `Último: ${task.fechas[0]}` : 'Sin fecha'}
-                           </span>
-                        </div>
-                     </div>
-
-                     {/* Footer: Metadata */}
-                     <div className="mt-6 flex items-center justify-between pt-4 border-t border-slate-50">
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-100">
-                           <div className="w-1.5 h-1.5 rounded-full bg-[#00D6CC]" />
-                           <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{task.area || 'CORE'}</span>
-                        </div>
-                        <span className={`px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest border shadow-inner ${priority.badge}`}>
-                           {priority.label}
-                        </span>
-                     </div>
+                  {/* Right part: Badges and Collapse arrow */}
+                  <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
+                    <span className="px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-slate-50 border border-slate-100 text-slate-500">
+                       {task.area || 'CORE'}
+                    </span>
+                    <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border shadow-inner ${priority.badge}`}>
+                       {priority.label}
+                    </span>
+                    <div className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border shadow-sm backdrop-blur-md ${getStatusColor(task.backlog_status || 'resuelto').badge} ${getStatusColor(task.backlog_status || 'resuelto').badgeBorder}`}>
+                       {getStatusColor(task.backlog_status || 'resuelto').label}
+                    </div>
+                    <div className={`text-slate-350 group-hover:text-slate-550 transition-colors ml-2`}>
+                       <ChevronDown size={16} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180 text-primary' : ''}`} />
+                    </div>
                   </div>
-                </div>
-
-                {/* Indicador de expansión minimalista */}
-                <div className={`absolute bottom-3 left-1/2 -translate-x-1/2 transition-all duration-500 ${isExpanded ? 'text-primary' : 'text-slate-200 opacity-0 group-hover:opacity-100'}`}>
-                   <ChevronDown size={14} className={`transition-transform duration-500 ${isExpanded ? 'rotate-180' : ''}`} />
                 </div>
 
                 {isExpanded && (
-                  <div className="p-6 pt-0 border-t border-slate-100 bg-slate-50/30 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="grid grid-cols-1 gap-6 mt-6">
+                  <div className="p-6 pt-4 border-t border-slate-100 bg-slate-50/30 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Left Column: Hallazgos and Justificaciones */}
                       <div className="space-y-6">
                         {task.hallazgos.length > 0 && (
                           <div>
@@ -314,8 +308,8 @@ export default function HistoryView() {
                             </h5>
                             <div className="space-y-3">
                               {task.hallazgos.map((h, i) => (
-                                <div key={i} className="p-4 rounded-xl bg-white border border-border-soft text-sm text-text-strong leading-relaxed shadow-sm">
-                                  <div className="text-[10px] font-bold text-text-muted mb-1 flex items-center gap-1">
+                                <div key={i} className="p-4 rounded-xl bg-white border border-slate-100 text-xs text-slate-700 leading-relaxed shadow-sm">
+                                  <div className="text-[9px] font-bold text-slate-450 mb-1 flex items-center gap-1">
                                     <Calendar size={10} /> {h.fecha}
                                   </div>
                                   {h.text}
@@ -328,7 +322,7 @@ export default function HistoryView() {
                         {task.hallazgos.length > 0 && (
                           <div className="pt-2">
                             <button
-                              onClick={() => generateSmartReport(task)}
+                              onClick={(e) => { e.stopPropagation(); generateSmartReport(task); }}
                               disabled={generatingReport === taskKey}
                               className="w-full py-3 px-4 rounded-xl bg-primary/5 text-primary border border-primary/20 font-bold text-xs flex items-center justify-center gap-2 hover:bg-primary/10 transition-all disabled:opacity-50"
                             >
@@ -348,7 +342,7 @@ export default function HistoryView() {
                               <Sparkles size={16} />
                               <h6 className="text-xs font-black uppercase tracking-widest">Informe Inteligente Generado</h6>
                             </div>
-                            <div className="prose prose-sm max-w-none text-text-strong text-sm leading-relaxed markdown-body">
+                            <div className="prose prose-sm max-w-none text-slate-700 text-xs leading-relaxed markdown-body">
                               <ReactMarkdown>{reports[taskKey]}</ReactMarkdown>
                             </div>
                           </div>
@@ -362,8 +356,8 @@ export default function HistoryView() {
                             </h5>
                             <div className="space-y-3">
                               {task.justificaciones.map((j, i) => (
-                                <div key={i} className="p-4 rounded-xl bg-accent/5 border border-accent/10 text-sm text-text-strong leading-relaxed shadow-sm">
-                                  <div className="text-[10px] font-bold text-accent/60 mb-1 flex items-center gap-1">
+                                <div key={i} className="p-4 rounded-xl bg-accent/5 border border-accent/10 text-xs text-slate-700 leading-relaxed shadow-sm">
+                                  <div className="text-[9px] font-bold text-accent/60 mb-1 flex items-center gap-1">
                                     <Calendar size={10} /> {j.fecha}
                                   </div>
                                   {j.text}
@@ -374,20 +368,21 @@ export default function HistoryView() {
                         )}
                       </div>
 
+                      {/* Right Column: Evidencias, Tiempos and Logs */}
                       <div className="space-y-6">
                         {task.evidencias.length > 0 && (
                           <div>
-                            <h5 className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                               <Paperclip size={12} />
                               Evidencias y Enlaces Acumulados
                             </h5>
                             <div className="space-y-2">
                               {task.evidencias.map((e, i) => (
-                                <div key={i} className="flex items-center gap-2 p-3 rounded-xl bg-white border border-border-soft group hover:border-primary/30 transition-all shadow-sm">
-                                  <Paperclip size={14} className="text-text-muted" />
+                                <div key={i} className="flex items-center gap-2 p-3 rounded-xl bg-white border border-slate-100 group hover:border-primary/30 transition-all shadow-sm">
+                                  <Paperclip size={14} className="text-slate-400" />
                                   <div className="flex-1 min-w-0">
-                                    <div className="text-[9px] font-bold text-text-muted mb-0.5">{e.fecha}</div>
-                                    <span className="text-xs text-text-strong block truncate">{e.text}</span>
+                                    <div className="text-[9px] font-bold text-slate-400 mb-0.5">{e.fecha}</div>
+                                    <span className="text-xs text-slate-700 block truncate">{e.text}</span>
                                   </div>
                                   {(e.text.startsWith('http') || e.text.startsWith('www')) && (
                                     <a
@@ -395,6 +390,7 @@ export default function HistoryView() {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="p-1.5 bg-primary/5 text-primary rounded-lg hover:bg-primary/10 transition-colors"
+                                      onClick={(e) => e.stopPropagation()}
                                     >
                                       <LinkIcon size={14} />
                                     </a>
@@ -405,10 +401,9 @@ export default function HistoryView() {
                           </div>
                         )}
 
-                        {/* Registro de Telemetría de Tiempos (Líder/Supervisor) */}
                         {task.tiempos && task.tiempos.length > 0 && (
                           <div className="mb-6">
-                            <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                               <Clock size={12} className="text-[#99CC33]" />
                               Registro de Enfoque Telemetría (Vista Líder)
                             </h5>
@@ -426,9 +421,8 @@ export default function HistoryView() {
                           </div>
                         )}
 
-                        {/* Línea de Tiempo Operativa (Logs) */}
                         <div>
-                          <h5 className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                             <Clock size={12} className="text-primary" />
                             Trazabilidad Operativa (Log de Estados)
                           </h5>
@@ -465,7 +459,6 @@ export default function HistoryView() {
                       </div>
                     </div>
                   </div>
-
                 )}
               </motion.div>
             );
