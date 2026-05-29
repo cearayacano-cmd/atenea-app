@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo, ShieldCheck } from 'lucide-react';
+import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo, ShieldCheck, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import HomeView from './components/HomeView';
 import ConfigView2 from './components/ConfigView2';
@@ -13,9 +13,10 @@ import AgendaView2 from './components/AgendaView2';
 import DashboardView2 from './components/DashboardView2';
 import HistoryView2 from './components/HistoryView2';
 import AdminView from './components/AdminView';
+import LiveView from './components/LiveView';
 import logoLatam from './assets/logo_latam.png';
 
-type View = 'home' | 'config2' | 'agenda2' | 'agenda_pro' | 'dashboard2' | 'history2' | 'admin';
+type View = 'home' | 'config2' | 'agenda2' | 'agenda_pro' | 'dashboard2' | 'history2' | 'admin' | 'live';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
@@ -51,13 +52,17 @@ export default function App() {
 
   const isSupervisor = user.role === 'supervisor';
 
-  const navItems = [
+  const standardItems = [
     { id: 'home', label: 'Inicio', icon: LayoutDashboard },
     { id: 'config2', label: 'Centro de Módulo', icon: Settings },
     { id: 'agenda_pro', label: 'Agenda Pro', icon: ListTodo },
     { id: 'dashboard2', label: 'Dashboard Pro', icon: BarChart3 },
     { id: 'history2', label: 'Historial Pro', icon: History },
-    ...(isSupervisor ? [{ id: 'admin', label: 'Admin · Equipo', icon: ShieldCheck }] : []),
+  ];
+
+  const supervisorItems = [
+    { id: 'live', label: 'Monitoreo en Vivo', icon: Activity },
+    { id: 'admin', label: 'Admin · Equipo', icon: ShieldCheck }
   ];
 
   return (
@@ -89,7 +94,13 @@ export default function App() {
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-2">
-          {navItems.map((item) => {
+          {isSidebarOpen && (
+            <div className="px-4 pb-2">
+              <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Operación</span>
+            </div>
+          )}
+          
+          {standardItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
             return (
@@ -120,6 +131,52 @@ export default function App() {
               </button>
             );
           })}
+
+          {/* Group for Supervisor Section */}
+          {isSupervisor && (
+            <>
+              {/* Divider / Group Header */}
+              {isSidebarOpen ? (
+                <div className="pt-6 pb-2 px-4 border-t border-white/5 mt-6">
+                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest font-black">Supervisión</span>
+                </div>
+              ) : (
+                <div className="border-t border-white/5 my-4 mx-4" />
+              )}
+
+              {supervisorItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setCurrentView(item.id as View)}
+                    className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 group relative ${
+                      isActive 
+                        ? 'bg-white/10 text-white shadow-lg' 
+                        : 'text-white/50 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <Icon 
+                      size={22} 
+                      className={isActive ? 'text-white' : 'text-white/40 group-hover:text-white'} 
+                    />
+                    {isSidebarOpen && (
+                      <>
+                        <span className="font-semibold text-sm tracking-wide">{item.label}</span>
+                        {isActive && (
+                          <motion.div 
+                            layoutId="activeDot"
+                            className="ml-auto w-1.5 h-1.5 bg-red-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.8)]" 
+                          />
+                        )}
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         {/* User Profile Section at bottom */}
@@ -208,6 +265,7 @@ export default function App() {
               )}
               {currentView === 'history2' && <HistoryView2 />}
               {currentView === 'admin' && <AdminView />}
+              {currentView === 'live' && <LiveView />}
             </motion.div>
           </AnimatePresence>
         </div>

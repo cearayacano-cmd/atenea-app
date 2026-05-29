@@ -165,6 +165,9 @@ if (!columns.includes("assigned_at")) {
 if (!columns.includes("closed_at")) {
   db.exec("ALTER TABLE Tareas ADD COLUMN closed_at TEXT");
 }
+if (!columns.includes("updated_at")) {
+  db.exec("ALTER TABLE Tareas ADD COLUMN updated_at TEXT");
+}
 
 
 const backlogInfo = db.prepare("PRAGMA table_info(Backlog)").all();
@@ -499,10 +502,10 @@ async function startServer() {
         db.prepare("UPDATE Backlog SET status = 'progreso' WHERE id = ?").run(currentBacklogId);
       }
 
-      const stmt = db.prepare("INSERT INTO Tareas (fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area, user_id, complejidad, created_at, assigned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+      const stmt = db.prepare("INSERT INTO Tareas (fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area, user_id, complejidad, created_at, assigned_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
       for(const uid of usersToAssign) {
         const valTiempo = (tiempo_asignado_minutos !== undefined && tiempo_asignado_minutos !== null) ? tiempo_asignado_minutos : null;
-        stmt.run(fecha, actividad, prioridad, valTiempo, fecha_origen_remanente || null, currentBacklogId, estado_ejecucion || null, evidencia || null, area || null, uid, complejidad || 2, finalCreatedAt, finalAssignedAt);
+        stmt.run(fecha, actividad, prioridad, valTiempo, fecha_origen_remanente || null, currentBacklogId, estado_ejecucion || null, evidencia || null, area || null, uid, complejidad || 2, finalCreatedAt, finalAssignedAt, nowStr);
       }
     })();
     res.json({ success: true });
@@ -527,6 +530,9 @@ async function startServer() {
 
     const updates = [];
     const params = [];
+
+    updates.push("updated_at = ?");
+    params.push(new Date().toISOString());
 
     if (actividad !== undefined) { updates.push("actividad = ?"); params.push(actividad); }
     if (prioridad !== undefined) { updates.push("prioridad = ?"); params.push(prioridad); }
@@ -625,9 +631,10 @@ async function startServer() {
         UPDATE Tareas 
         SET estado_ejecucion = 'arrastrada', 
             antiguedad = antiguedad + 1,
-            hallazgos = ?
+            hallazgos = ?,
+            updated_at = ?
         WHERE id = ?
-      `).run(hallazgos || '', id);
+      `).run(hallazgos || '', new Date().toISOString(), id);
 
       // If it has a backlog reference, return it to backlog and update its antiguedad
       if (task.backlog_id) {
@@ -979,9 +986,10 @@ async function startServer() {
       UPDATE Tareas 
       SET hora_inicio_plan = NULL, 
           hora_fin_plan = NULL, 
-          tiempo_asignado_minutos = NULL 
+          tiempo_asignado_minutos = NULL,
+          updated_at = ?
       WHERE fecha = ?
-    `).run(fecha);
+    `).run(new Date().toISOString(), fecha);
     res.json({ success: true });
   });
 
@@ -1218,23 +1226,26 @@ async function startServer() {
     try {
       const { text } = req.body;
       const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
-      const prompt = `Analiza el siguiente texto libre y conviértelo en una actividad clara y profesional para un backlog operativo.
+      const prompt = `Analiza el texto libre y conviértelo en una actividad clara y profesional para un backlog operativo.
       
-REGLA MUY IMPORTANTE: NO dividas ni desgloses el texto en múltiples tareas. Devuelve SIEMPRE 1 sola actividad (a menos que haya viñetas claras).
+REGLA MUY IMPORTANTE: NO dividas ni desgloses el texto en múltiples tareas. Devuelve SIEMPRE 1 sola actividad.
 
 TU OBJETIVO PRINCIPAL:
-1. REGLA DE ORO DE LA ACTIVIDAD: La propiedad "actividad" del JSON resultante debe ser EXACTAMENTE el texto original ingresado por el usuario (solo se permite corregir de forma mínima la ortografía de palabras si es necesario). NUNCA reescribas la actividad, no la resumas, no la generalices, y bajo ningún concepto la reemplaces por los títulos o nombres del catálogo oficial. Debe conservarse el texto exacto tal como lo escribió el usuario.
-2. Evalúa las palabras del usuario para encontrar su similitud lógica con el siguiente CATÁLOGO OFICIAL (basado en el Modelo de Calidad Customer Care de 12 pasos) para fines de metadata.
-3. El catálogo oficial sirve ÚNICAMENTE para extraer y asignar "complejidad", "tiempo_estimado" y "rol_ejecutante" según la similitud lógica. Si no hay similitud, asume complejidad 2, tiempo 60 y rol "Calidad Fabrica". NUNCA uses los nombres del catálogo en la propiedad "actividad".
+1. CORRECCIÓN Y PROFESIONALISMO: DEBES corregir la ortografía y mejorar la redacción del texto ingresado por el usuario. La propiedad "actividad" de tu respuesta JSON DEBE contener el texto YA CORREGIDO y profesional, conservando la idea original.
+   Ejemplo 1: "voyu a revisar cosas en radar" -> "actividad": "Revisar indicadores en Radar"
+   Ejemplo 2: "tengo que validacion de hipotesis de concta cente para aduitoria" -> "actividad": "Validación de hipótesis de Contact Center para auditoría"
+
+2. MAPEO INTELIGENTE AL CATÁLOGO: Evalúa la intención del usuario para encontrar su similitud lógica con el siguiente CATÁLOGO OFICIAL. Por ejemplo, si menciona "validacion de hipotesis", mapealo a la tarea de Validación de hipótesis para heredar sus atributos.
+3. El catálogo oficial sirve ÚNICAMENTE para extraer y asignar "complejidad", "tiempo_estimado" y "rol_ejecutante" según esa similitud lógica. Si no hay similitud evidente, asume complejidad 2, tiempo 60 y rol "Calidad Fabrica".
 
 [CATÁLOGO - Calidad Fabrica]
-- "Paso 1-4: Revisión de indicadores Radar / Foco" (complejidad: 1, tiempo: 60)
-- "Paso 5: Hipótesis: planteamiento + contexto" (complejidad: 2, tiempo: 75)
-- "Paso 6: Validación en Operación (Escuchas/Lado a lado)" (complejidad: 2, tiempo: 165)
-- "Paso 6.1: Validación hipótesis en conjunto con LCoach" (complejidad: 1, tiempo: 60)
-- "Paso 7-8: Análisis con IA (LEA + Amelia)" (complejidad: 3, tiempo: 60)
-- "Paso 9: Construir Entregable (slide/plan acción)" (complejidad: 2, tiempo: 60)
-- "Paso 10-12: Seguimiento, Ajuste y Escalamiento" (complejidad: 2, tiempo: 60)
+- "Revisión de indicadores entregados por RADAR" (complejidad: 1, tiempo: 60)
+- "Hipótesis: planteamiento + contexto operacional (en plataforma)" (complejidad: 2, tiempo: 75)
+- "Escuchas y validacion de hipotesis (en plataforma)" (complejidad: 2, tiempo: 165)
+- "Validación hipótesis en conjunto con LCoach" (complejidad: 1, tiempo: 60)
+- "Análisis con IA: descarga LEA + armado para análisis IA" (complejidad: 3, tiempo: 60)
+- "Armar slide y plan de acción para seguimiento" (complejidad: 2, tiempo: 60)
+- "Seguimiento de focos (en plataforma)" (complejidad: 2, tiempo: 60)
 
 [CATÁLOGO - Calidad LATAM]
 - "Análisis profundo IA + escuchas" (complejidad: 3, tiempo: 240)
@@ -1243,14 +1254,14 @@ TU OBJETIVO PRINCIPAL:
 - "Revisión levantamientos Operación" (complejidad: 1, tiempo: 30)
 - "Calibraciones" (complejidad: 1, tiempo: 60)
 
-4. REGLA DE ARRASTRE: Si en el texto el usuario menciona que es una tarea "retrasada", "pendiente de ayer", o que lleva días "arrastrándose", DEBES sumar obligatoriamente +1 al nivel de complejidad original y si la complejidad final es >=3, sugiere dividir la tarea.
-5. Asigna una "prioridad" lógica (7 alta, 4 media, 2 baja). REGLA CRÍTICA: Si la complejidad asignada es 1, la prioridad NO puede ser alta (7).
+4. REGLA DE ARRASTRE: Si en el texto el usuario menciona que es una tarea "retrasada", "pendiente de ayer", o que lleva días "arrastrándose", suma +1 a la complejidad.
+5. Asigna una "prioridad" lógica (10 crítica, 7 alta, 4 media, 2 baja). REGLA CRÍTICA: Si la complejidad asignada es 1, la prioridad NO puede ser alta o crítica (no puede ser 7 ni 10).
 6. Asigna el "area" más lógica ("Operativo", "Monitoreo", "Tendencias", "Escuelita", "Calidad").
 
 El formato de salida debe ser ESTRICTAMENTE un JSON array de objetos con:
 "actividad" (string), "prioridad" (number), "area" (string), "complejidad" (number), "tiempo_estimado" (number), "rol_ejecutante" (string).
 
-REGLA CRÍTICA: SOLO DEBES RESPONDER CON EL JSON ARRAY y absolutamente nada de texto adicional. Ni "Aquí tienes", ni explicaciones. Solo el JSON.
+REGLA CRÍTICA: SOLO DEBES RESPONDER CON EL JSON ARRAY y absolutamente nada de texto adicional. Solo el JSON.
 
 Texto a analizar: "${text}"`;
 
@@ -1264,6 +1275,112 @@ Texto a analizar: "${text}"`;
     }
   });
 
+
+  // ─── ADMIN: Live Monitor (Tiempo Real) ───────────────────────────────────────
+  app.get("/api/admin/live", (req, res) => {
+    try {
+      // 1. Todos los agentes (operadores y supervisores)
+      const agentes = db.prepare("SELECT id, nombre, email, initials, role, rol_ejecutante FROM Usuarios").all() as any[];
+      
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' }); // or use generic ISO
+      const isoToday = new Date().toISOString().split('T')[0];
+
+      // 2. Todas las tareas no terminadas de hoy para estado activo
+      const tareasHoyNoTerminadas = db.prepare(`
+        SELECT T.*, COALESCE(B.status, 'nuevo') as backlog_status, COALESCE(B.is_collaborative, 0) as is_collaborative, COALESCE(B.antiguedad, 0) as backlog_antiguedad
+        FROM Tareas T
+        LEFT JOIN Backlog B ON T.backlog_id = B.id
+        WHERE T.fecha = ? AND (T.estado_ejecucion IS NULL OR LOWER(T.estado_ejecucion) NOT IN ('terminada', 'resuelto', 'cancelada', 'despriorizada'))
+      `).all(isoToday) as any[];
+
+      // 3. Todas las tareas de hoy (incluyendo terminadas y con is_collaborative de Backlog)
+      const tareasHoyTotal = db.prepare(`
+        SELECT T.*, COALESCE(B.status, 'nuevo') as backlog_status, COALESCE(B.is_collaborative, 0) as is_collaborative
+        FROM Tareas T
+        LEFT JOIN Backlog B ON T.backlog_id = B.id
+        WHERE T.fecha = ?
+      `).all(isoToday) as any[];
+
+      // 4. Incidencias activas en este momento
+      const now = new Date();
+      // Format as HH:mm
+      const nowHHMM = now.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
+      
+      const incidenciasHoy = db.prepare(`
+        SELECT I.* 
+        FROM Incidencias I
+        WHERE I.fecha = ?
+      `).all(isoToday) as any[];
+
+      // 5. Horas efectivas para calcular factor de ocupación
+      const planHoy = db.prepare("SELECT horas_efectivas FROM PlanesDiarios WHERE date = ?").get(isoToday) as { horas_efectivas: number } | undefined;
+      const config = db.prepare("SELECT horas_efectivas FROM Configuracion WHERE id = 1").get() as { horas_efectivas: number };
+      const horasEfectivas = planHoy?.horas_efectivas || config?.horas_efectivas || 6.0;
+      const minutosCapacidad = horasEfectivas * 60;
+
+      const result = agentes.map(ag => {
+        // Find incidence
+        const incidenciaActiva = incidenciasHoy.find(i => {
+          if (i.user_id !== ag.id) return false;
+          if (!i.hora_inicio || !i.hora_fin) return false;
+          return nowHHMM >= i.hora_inicio && nowHHMM <= i.hora_fin;
+        });
+
+        // Find tasks
+        const tareasAgenteActivas = tareasHoyNoTerminadas.filter(t => t.user_id === ag.id);
+        
+        // Find if they are actively working on one
+        const tareaEnProgreso = tareasAgenteActivas.find(t => {
+          const st = (t.estado_ejecucion || '').toLowerCase();
+          return st === 'progreso' || st === 'en progreso' || st === 'en curso' || st === 'en estudio';
+        });
+
+        // If not, just find any pending task
+        const tareaPendiente = tareasAgenteActivas.find(t => {
+          const st = (t.estado_ejecucion || '').toLowerCase();
+          return st === 'nuevo' || st === 'abierto' || st === 'en espera' || st === 'pendiente';
+        });
+
+        const tareaActiva = tareaEnProgreso || tareaPendiente;
+
+        let estado = 'disponible';
+        let detalle = 'Sin asignación actual';
+
+        if (incidenciaActiva) {
+          estado = 'incidencia';
+          detalle = incidenciaActiva.descripcion || incidenciaActiva.tipo || 'Incidencia no especificada';
+        } else if (tareaEnProgreso) {
+          estado = 'trabajando';
+          detalle = tareaEnProgreso.actividad;
+        } else if (tareaPendiente) {
+          estado = 'asignada';
+          detalle = tareaPendiente.actividad;
+        }
+
+        // Tareas del agente para el día
+        const tareasAgenteTotal = tareasHoyTotal.filter(t => t.user_id === ag.id);
+        const minutosOcupados = tareasAgenteTotal.reduce((sum, t) => sum + (t.tiempo_asignado_minutos || 0), 0);
+        const porcentajeOcupacion = minutosCapacidad > 0 ? Math.round((minutosOcupados / minutosCapacidad) * 100) : 0;
+
+        return {
+          ...ag,
+          estado,
+          detalle,
+          tarea: tareaActiva || null,
+          incidencia: incidenciaActiva || null,
+          totalTareas: tareasAgenteTotal.length,
+          porcentajeOcupacion,
+          minutosOcupados,
+          minutosCapacidad,
+          tareas: tareasAgenteTotal
+        };
+      });
+
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
 
   // ─── ADMIN: Resumen Global del Equipo ───────────────────────────────────────
   app.get("/api/admin/resumen", (req, res) => {
