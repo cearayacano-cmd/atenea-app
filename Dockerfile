@@ -24,5 +24,5 @@ COPY --from=builder /app/server.ts ./
 # We don't copy database.db here to avoid overwriting production data with dev data.
 # The server.ts already has logic to create the DB and tables if they don't exist.
 
-EXPOSE 3000
+EXPOSE 3005
 CMD ["npm", "start"]

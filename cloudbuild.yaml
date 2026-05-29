@@ -20,6 +20,6 @@ steps:
       - 'managed'
       - '--allow-unauthenticated'
       - '--port'
-      - '3000'
+      - '3005'
 images:
   - 'gcr.io/$PROJECT_ID/atenea-app'

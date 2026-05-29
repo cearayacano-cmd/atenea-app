@@ -284,7 +284,7 @@ if (!blockColumns.includes("dia_semana")) {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = process.env.PORT || 3005;
 
   app.set("trust proxy", true);
   app.use(express.json());
