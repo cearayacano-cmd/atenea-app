@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  atenea-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: atenea-app-container
+    ports:
+      - "3005:3005"
+    volumes:
+      - ./database.db:/app/database.db
+    env_file:
+      - .env
+    restart: unless-stopped
