@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo, ShieldCheck, Activity } from 'lucide-react';
+import { Settings, LayoutDashboard, Menu, X, History, BarChart3, ListTodo, ShieldCheck, Activity, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import HomeView from './components/HomeView';
 import ConfigView2 from './components/ConfigView2';
@@ -14,9 +14,10 @@ import DashboardView2 from './components/DashboardView2';
 import HistoryView2 from './components/HistoryView2';
 import AdminView from './components/AdminView';
 import LiveView from './components/LiveView';
+import TutorialView from './components/TutorialView';
 import logoLatam from './assets/logo_latam.png';
 
-type View = 'home' | 'config2' | 'agenda2' | 'agenda_pro' | 'dashboard2' | 'history2' | 'admin' | 'live';
+type View = 'home' | 'config2' | 'agenda2' | 'agenda_pro' | 'dashboard2' | 'history2' | 'admin' | 'live' | 'tutorial';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
@@ -58,6 +59,7 @@ export default function App() {
     { id: 'agenda_pro', label: 'Agenda Pro', icon: ListTodo },
     { id: 'dashboard2', label: 'Dashboard Pro', icon: BarChart3 },
     { id: 'history2', label: 'Historial Pro', icon: History },
+    { id: 'tutorial', label: 'Guía de Turno', icon: BookOpen },
   ];
 
   const supervisorItems = [
@@ -266,6 +268,7 @@ export default function App() {
               {currentView === 'history2' && <HistoryView2 />}
               {currentView === 'admin' && <AdminView />}
               {currentView === 'live' && <LiveView />}
+              {currentView === 'tutorial' && <TutorialView />}
             </motion.div>
           </AnimatePresence>
         </div>

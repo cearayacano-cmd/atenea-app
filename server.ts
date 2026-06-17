@@ -475,7 +475,11 @@ async function startServer() {
     
     if (Number(prioridad) === 10) {
       if (usersToAssign.includes(uid)) {
-        const existing = db.prepare("SELECT id FROM Tareas WHERE fecha = ? AND user_id = ? AND prioridad = 10 AND LOWER(COALESCE(estado_ejecucion, 'nuevo')) IN ('nuevo', 'abierto', 'progreso', 'en progreso')").get(fecha, uid);
+        const existing = db.prepare(`
+          SELECT id FROM Tareas 
+          WHERE fecha = ? AND user_id = ? AND prioridad = 10 
+            AND LOWER(COALESCE(estado_ejecucion, 'nuevo')) NOT IN ('resuelto', 'terminada', 'fallo', 'fallido', 'despriorizado', 'despriorizada', 'no realizado')
+        `).get(fecha, uid);
         if (existing) {
           return res.status(400).json({ error: "Límite superado: solo se permite una tarea crítica por día para tu usuario." });
         }

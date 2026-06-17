@@ -825,7 +825,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                   className="flex items-center gap-2 px-5 py-3.5 bg-amber-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 active:scale-95 transition-all shadow-lg shadow-amber-100"
                 >
                   <PlusCircle size={16} />
-                  + Registrar
+                  Rompe Agenda
                 </button>
               )}
               <button 
