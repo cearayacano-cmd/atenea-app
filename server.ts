@@ -417,7 +417,12 @@ async function startServer() {
     if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
     const uid = parseInt(userId as string) || 1;
 
-    const tasks = db.prepare("SELECT * FROM Tareas WHERE fecha = ? AND user_id = ?").all(fecha, uid);
+    const tasks = db.prepare(`
+      SELECT T.*, B.is_collaborative 
+      FROM Tareas T 
+      LEFT JOIN Backlog B ON T.backlog_id = B.id 
+      WHERE T.fecha = ? AND T.user_id = ?
+    `).all(fecha, uid);
 
     // Also fetch/calculate the daily plan for this date to support the frontend logic
     let plan = db.prepare("SELECT * FROM PlanesDiarios WHERE date = ?").get(fecha) as any;
@@ -471,7 +476,14 @@ async function startServer() {
       }
     }
     
-    const usersToAssign = (assignedUsers && assignedUsers.length > 0) ? assignedUsers : [userId || 1];
+    let usersToAssign = (assignedUsers && assignedUsers.length > 0) ? assignedUsers : [uid];
+    
+    if (backlog_id && (!assignedUsers || assignedUsers.length === 0)) {
+      const dbAssignments = db.prepare("SELECT user_id FROM BacklogAsignaciones WHERE backlog_id = ?").all(backlog_id) as any[];
+      if (dbAssignments.length > 0) {
+        usersToAssign = dbAssignments.map(a => a.user_id);
+      }
+    }
     
     if (Number(prioridad) === 10) {
       if (usersToAssign.includes(uid)) {

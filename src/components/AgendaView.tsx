@@ -60,7 +60,7 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
   const [isClosing, setIsClosing] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [newIncident, setNewIncident] = useState<Partial<Incidencia>>({
-    tipo: 'Almuerzo',
+    tipo: 'Reunión',
     hora_inicio: '',
     hora_fin: '',
     descripcion: ''
@@ -767,7 +767,6 @@ export default function AgendaView({ onNavigate }: { onNavigate?: (view: any) =>
                   onChange={(e) => setNewIncident({...newIncident, tipo: e.target.value})}
                   className="w-full p-3 rounded-xl border border-[#d6d3d1] outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                 >
-                  <option value="Almuerzo">Almuerzo</option>
                   <option value="Reunión">Reunión</option>
                   <option value="Personal">Personal</option>
                   <option value="Otro">Otro</option>

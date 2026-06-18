@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle2, Circle, AlertTriangle, Calendar as CalendarIcon, Save, PlusCircle, Clock, Tag, X, Loader2, Link as LinkIcon, Paperclip, Plus, Trash2, BrainCircuit, Activity, TrendingUp, BarChart3, CheckCircle, Zap, ListChecks, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Circle, AlertTriangle, Calendar as CalendarIcon, Save, PlusCircle, Clock, Tag, X, Loader2, Link as LinkIcon, Paperclip, Plus, Trash2, BrainCircuit, Activity, TrendingUp, BarChart3, CheckCircle, Zap, ListChecks, RefreshCw, User, Users } from 'lucide-react';
 import { getStatusColor, getPriorityColor } from '../utils/colors';
 
 interface Task {
@@ -19,6 +19,7 @@ interface Task {
   tiempo_invertido_minutos?: number;
   backlog_id?: number;
   created_at?: string;
+  is_collaborative?: boolean;
 }
 
 interface Plan {
@@ -111,6 +112,11 @@ function TaskCard({ task, isClosed, updateTask, getFirstTime, onOpenDetails }: {
           {/* Status badge */}
           <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase border shadow-sm ${sc.badge} ${sc.badgeBorder}`}>
             {sc.label}
+          </span>
+          {/* Colaborativo badge */}
+          <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase shadow-sm flex items-center gap-1 ${task.is_collaborative ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
+            {task.is_collaborative ? <Users size={10} /> : <User size={10} />}
+            {task.is_collaborative ? 'Grupal' : 'Individual'}
           </span>
           {task.area && (
             <span className="text-[8px] font-black text-slate-500 bg-white px-2 py-1 rounded-lg uppercase border border-slate-100 shadow-sm">{task.area}</span>
@@ -269,7 +275,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
   const [isClosing, setIsClosing] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [newIncident, setNewIncident] = useState<Partial<Incidencia>>({
-    tipo: 'Almuerzo',
+    tipo: 'Reunión',
     hora_inicio: '',
     hora_fin: '',
     descripcion: ''
@@ -289,7 +295,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
         : (weights[t.prioridad] || 1);
       const status = (t.estado_ejecucion || 'nuevo').toLowerCase();
       
-      if (status === 'nuevo' || status === 'abierto' || status === 'pendiente' || status === 'en curso' || status === 'en estudio') {
+      if (status === 'nuevo' || status === 'abierto' || status === 'en curso' || status === 'en estudio') {
         usedHours += baseHours; // Trabajo Activo o Planeado: 100% carga
       } else if (status === 'en espera') {
         usedHours += baseHours * 0.5; // Bloqueado: Libera el 50% para permitir rotación
@@ -329,7 +335,8 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/tareas?fecha=${selectedDate}`);
+      const userId = Number(localStorage.getItem('atenea_user_id') || 1);
+      const res = await fetch(`/api/tareas?userId=${userId}&fecha=${selectedDate}`);
       const data = await res.json();
       const tasksList = Array.isArray(data.tasks) ? data.tasks : [];
       setTasks(tasksList.map((t: any) => ({
@@ -379,7 +386,8 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
 
       const historyData = await Promise.all(
         last7Days.map(async (dStr) => {
-          const tRes = await fetch(`/api/tareas?fecha=${dStr}`);
+          const userId = Number(localStorage.getItem('atenea_user_id') || 1);
+          const tRes = await fetch(`/api/tareas?userId=${userId}&fecha=${dStr}`);
           const tData = await tRes.json();
           const dayTasks: any[] = tData.tasks || [];
           
@@ -800,22 +808,60 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
               </div>
             </div>
 
-            <div className="flex-1 max-w-sm w-full space-y-3">
-               <div className="w-full bg-slate-50 h-4 rounded-full overflow-hidden flex p-1 shadow-inner border border-slate-100">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${timeInfo.percentage}%` }}
-                    className={`h-full rounded-full transition-all duration-500 ${timeInfo.percentage > 90 ? 'bg-red-500' : timeInfo.percentage > 70 ? 'bg-amber-500' : 'bg-emerald-500'} shadow-[0_0_10px_rgba(0,0,0,0.1)]`}
-                  />
-               </div>
-               <div className="flex justify-between items-center">
-                  <p className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-2 ${timeInfo.percentage > 90 ? 'text-red-500' : 'text-slate-400'}`}>
-                     <Zap size={10} /> Capacidad Utilizada: {timeInfo.percentage.toFixed(0)}%
-                  </p>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                     Capacidad Total: 100%
-                  </p>
-               </div>
+            <div className="flex-1 min-w-[220px] flex flex-col justify-center">
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Carga Diaria
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {timeInfo.percentage > 100 ? (
+                      <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1">
+                        <AlertTriangle size={12}/> Sobrecarga
+                      </span>
+                    ) : timeInfo.percentage < 85 ? (
+                      <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-1">
+                        <Zap size={12}/> Energía de Sobra
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1">
+                        <CheckCircle size={12}/> Óptimo
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right flex flex-col justify-end">
+                  <span className="text-xl font-black text-slate-700 leading-none">
+                    {Math.round(timeInfo.percentage)}%
+                  </span>
+                </div>
+              </div>
+              
+              <div className="h-2 bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, timeInfo.percentage)}%` }}
+                  className={`h-full rounded-full transition-all duration-1000 ${
+                    timeInfo.percentage > 100 ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.4)]' : 
+                    timeInfo.percentage < 85 ? 'bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.4)]' : 
+                    'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                  }`}
+                />
+              </div>
+
+              <div className="mt-1.5 flex justify-end">
+                <span className={`text-[8px] font-bold uppercase tracking-wider ${
+                  timeInfo.percentage > 100 ? 'text-rose-400' : 
+                  timeInfo.percentage < 85 ? 'text-blue-500' : 
+                  'text-emerald-400'
+                }`}>
+                  {timeInfo.percentage > 100 
+                    ? '⚠️ REDUCE CARGA O AÑADE HORAS' 
+                    : timeInfo.percentage < 85 
+                    ? '¡TIEMPO LIBRE! JALA UNA TAREA 😎' 
+                    : 'CALZA PERFECTO CON TU TURNO'}
+                </span>
+              </div>
             </div>
 
             <div className="flex items-center gap-3">
@@ -1075,7 +1121,6 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                   onChange={(e) => setNewIncident({...newIncident, tipo: e.target.value})}
                   className="w-full p-3 rounded-xl border border-[#d6d3d1] outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                 >
-                  <option value="Almuerzo">Almuerzo</option>
                   <option value="Reunión">Reunión</option>
                   <option value="Personal">Personal</option>
                   <option value="Otro">Otro</option>

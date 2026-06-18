@@ -189,7 +189,8 @@ export default function ConfigView2() {
     const prevDate = toLocalYYYYMMDD(prevDateObj);
 
     try {
-      const res = await fetch(`/api/tareas?fecha=${prevDate}`);
+      const userId = Number(localStorage.getItem('atenea_user_id') || 1);
+      const res = await fetch(`/api/tareas?userId=${userId}&fecha=${prevDate}`);
       const data = await res.json();
       
       if (data.tasks) {
@@ -227,15 +228,21 @@ export default function ConfigView2() {
     setPendingSuggestions(prev => prev.filter(p => p.id !== taskId));
   };
 
+  const fetchDailyTasks = () => {
+    if (!selectedPlanningDate) return;
+    const userId = Number(localStorage.getItem('atenea_user_id') || 1);
+    fetch(`/api/tareas?userId=${userId}&fecha=${selectedPlanningDate}`)
+      .then(res => res.json())
+      .then(data => {
+         if (Array.isArray(data)) setDayTasks(data);
+         else if (data && Array.isArray(data.tasks)) setDayTasks(data.tasks);
+         else setDayTasks([]);
+      }).catch(() => setDayTasks([]));
+  };
+
   useEffect(() => {
-    if (isPlanningModalOpen && selectedPlanningDate) {
-      fetch(`/api/tareas?fecha=${selectedPlanningDate}`)
-        .then(res => res.json())
-        .then(data => {
-           if (Array.isArray(data)) setDayTasks(data);
-           else if (data && Array.isArray(data.tasks)) setDayTasks(data.tasks);
-           else setDayTasks([]);
-        }).catch(() => setDayTasks([]));
+    if (isPlanningModalOpen) {
+      fetchDailyTasks();
     }
   }, [isPlanningModalOpen, selectedPlanningDate]);
 
@@ -273,7 +280,8 @@ export default function ConfigView2() {
 
   const fetchAllTasks = async () => {
     try {
-      const res = await fetch('/api/tareas/todas');
+      const userId = Number(localStorage.getItem('atenea_user_id') || 1);
+      const res = await fetch(`/api/tareas/todas?userId=${userId}`);
       const data = await res.json();
       setAllTasks(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -434,6 +442,7 @@ export default function ConfigView2() {
       
       fetchBacklog();
       fetchAllTasks();
+      fetchDailyTasks();
       
       // Feedback visual
       const el = document.getElementById(`day-col-${dateStr}`);
@@ -553,6 +562,7 @@ export default function ConfigView2() {
     setJustificationText('');
     setOriginalPriority(null);
     fetchBacklog();
+    fetchDailyTasks();
   };
 
   const handleSaveConfig = async (pStart?: string, pEnd?: string) => {
@@ -836,6 +846,7 @@ export default function ConfigView2() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          userId: Number(localStorage.getItem('atenea_user_id') || 1),
           fecha: selectedPlanningDate,
           actividad: task.actividad,
           prioridad: task.prioridad,
@@ -848,7 +859,8 @@ export default function ConfigView2() {
       });
 
       setPendingSuggestions(prev => prev.filter(p => p.id !== task.id));
-      const dayTasksRes = await fetch(`/api/tareas?fecha=${selectedPlanningDate}`);
+      const userId = Number(localStorage.getItem('atenea_user_id') || 1);
+      const dayTasksRes = await fetch(`/api/tareas?userId=${userId}&fecha=${selectedPlanningDate}`);
       if (dayTasksRes.ok) {
          const data = await dayTasksRes.json();
          if (Array.isArray(data)) setDayTasks(data);
@@ -900,7 +912,8 @@ export default function ConfigView2() {
     if (!window.confirm("¿Estás seguro de que deseas limpiar todas las tareas de este día?")) return;
     
     try {
-      await fetch(`/api/tareas/clear?fecha=${selectedPlanningDate}`, { method: 'DELETE' });
+      const userId = Number(localStorage.getItem('atenea_user_id') || 1);
+      await fetch(`/api/tareas/clear?userId=${userId}&fecha=${selectedPlanningDate}`, { method: 'DELETE' });
       setDayTasks([]);
       fetchBacklog();
       fetchAllTasks(); 
@@ -916,7 +929,7 @@ export default function ConfigView2() {
     let usedHours = 0;
     tasks.forEach(t => {
       const baseHours = weights[t.prioridad] || 1;
-      const status = (t.estado_ejecucion || 'nuevo').toLowerCase();
+      const status = (t.estado_ejecucion || t.execution_status || 'nuevo').toLowerCase();
       
       if (status === 'nuevo' || status === 'abierto' || status === 'progreso' || status === 'en_curso') {
         usedHours += baseHours; 
@@ -964,7 +977,7 @@ export default function ConfigView2() {
   const { usedHours, availableHours, remainingHours } = calculateTimeInfo();
 
   const getCardBadgeInfo = (task: BacklogItem) => {
-    if (task.status === 'progreso') {
+    if (task.status === 'progreso' || task.status === 'abierto') {
       const todayStr = toLocalYYYYMMDD(new Date());
       const isToday = task.scheduled_date === todayStr;
       const dateLabel = isToday ? 'Hoy' : (task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : 'Plan');
@@ -984,7 +997,7 @@ export default function ConfigView2() {
         label = `${dateLabel}: Fallo`;
       } else {
         statusKey = 'pendiente';
-        label = `${dateLabel}: Agendado`;
+        label = `ASIGNADO (${dateLabel})`;
       }
       
       const config = getStatusColor(statusKey);
@@ -996,7 +1009,7 @@ export default function ConfigView2() {
   };
 
   const getCardBgClass = (task: BacklogItem) => {
-    if (task.status === 'progreso') {
+    if (task.status === 'progreso' || task.status === 'abierto') {
       const exec = task.execution_status;
       if (exec === 'progreso' || exec === 'en_curso') {
         return 'bg-[#FFE017]/5 border-[#FFE017]/30 shadow-md ring-2 ring-[#FFE017]/20';
@@ -1005,7 +1018,7 @@ export default function ConfigView2() {
       } else if (exec === 'fallo' || exec === 'fallido' || exec === 'no realizado') {
         return 'bg-[#B20F3B]/5 border-[#B20F3B]/30 shadow-md ring-2 ring-[#B20F3B]/20';
       } else {
-        return 'bg-[#00D6CC]/5 border-[#00D6CC]/30 hover:shadow-md ring-2 ring-[#00D6CC]/10';
+        return 'bg-slate-100 border-slate-200 shadow-none opacity-60 grayscale-[0.5]';
       }
     }
     
@@ -1036,24 +1049,8 @@ export default function ConfigView2() {
               </div>
               <form onSubmit={handleSaveTask} className="p-5 space-y-4">
                 
-                {/* 1. Rol y Área en Paralelo */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Estado</label>
-                    <select 
-                      value={editingTask?.status || 'nuevo'} 
-                      onChange={e => setEditingTask({...editingTask, status: e.target.value})}
-                      className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary"
-                    >
-                      <option value="nuevo">Nuevo</option>
-                      <option value="abierto">Abierto</option>
-                      <option value="pendiente">Pendiente</option>
-                      <option value="en espera">En Espera</option>
-                      <option value="resuelto">Resuelto</option>
-                      <option value="despriorizado">Despriorizado</option>
-                      <option value="fallo">Fallo</option>
-                    </select>
-                  </div>
+                {/* 1. Área */}
+                <div className="grid gap-4">
 
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Área / Categoría</label>
@@ -1073,7 +1070,9 @@ export default function ConfigView2() {
 
                 {/* 2. Actividad (Predefinida o Libre) */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Actividad</label>
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                    Actividad {!!editingTask?.id && <span className="lowercase font-normal text-slate-300 tracking-normal ml-1">(no editable)</span>}
+                  </label>
                   {!!editingTask?.id ? (
                     <textarea 
                       value={editingTask?.actividad || ''} 
@@ -1130,7 +1129,9 @@ export default function ConfigView2() {
                 {/* 3. Complejidad y Colaborativo en Paralelo */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Complejidad</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                      Complejidad <span className="lowercase font-normal text-slate-300 tracking-normal ml-1">(no editable)</span>
+                    </label>
                     <div className="p-2 bg-slate-100 rounded-xl text-[10px] font-bold text-slate-600 text-center">
                       {editingTask?.complejidad === 1 ? '1 - BAJO' : editingTask?.complejidad === 2 ? '2 - MEDIO' : '3 - ALTO'}
                     </div>
@@ -1313,7 +1314,7 @@ export default function ConfigView2() {
         )}
       </AnimatePresence>
 
-      {/* MODAL DE EXCEPCIÓN */}
+      {/* MODAL DE BLOQUEO */}
       <AnimatePresence>
         {isExcepcionModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
@@ -1323,7 +1324,7 @@ export default function ConfigView2() {
                   <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center text-accent">
                     <Plus size={18} />
                   </div>
-                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Añadir Excepción</h3>
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Añadir Bloqueo</h3>
                 </div>
                 <button onClick={() => setIsExcepcionModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors">✕</button>
               </div>
@@ -1381,7 +1382,7 @@ export default function ConfigView2() {
                       <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Especifique el motivo</label>
                       <input 
                         type="text" 
-                        placeholder="¿Por qué esta excepción?"
+                        placeholder="¿Por qué este bloqueo?"
                         value={newBlock.motivo}
                         onChange={e => setNewBlock({...newBlock, motivo: e.target.value})}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-accent"
@@ -1395,7 +1396,7 @@ export default function ConfigView2() {
                   onClick={() => { addBloque(); setIsExcepcionModalOpen(false); }} 
                   className="w-full py-4 bg-accent text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-accent-hover transition-all shadow-xl shadow-accent/20 flex items-center justify-center gap-2"
                 >
-                  <Plus size={16} /> Confirmar Excepción
+                  <Plus size={16} /> Confirmar Bloqueo
                 </button>
               </div>
             </motion.div>
@@ -1821,6 +1822,11 @@ export default function ConfigView2() {
                                     </span>
                                   );
                                 })()}
+                                {task.is_collaborative ? (
+                                  <span className="text-[7px] font-black px-2 py-0.5 rounded-full uppercase shadow-sm bg-amber-50 text-amber-600 border border-amber-200 flex items-center gap-1">
+                                    <Users size={8} /> GRUPAL
+                                  </span>
+                                ) : null}
                               </div>
                           </div>
                           <p className="text-[12px] font-bold text-slate-700 leading-snug pr-4">{task.actividad}</p>
@@ -1929,18 +1935,30 @@ export default function ConfigView2() {
                             </div>
                             <span className="text-[13px] font-bold text-slate-700">{t.actividad}</span>
                           </div>
-                          {!isPlanningBlocked && (
-                            <button onClick={async () => {
-                              if (!window.confirm("¿Estás seguro de que deseas eliminar esta tarea asignada?")) return;
-                              await fetch(`/api/tareas/${t.id}`, { method: 'DELETE' });
-                              setDayTasks(prev => prev.filter(x => x.id !== t.id));
-                              fetchBacklog();
-                              fetchAllTasks();
-                            }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all p-2"
-                            title="Eliminar tarea asignada">
-                              <Trash2 size={16} />
-                            </button>
-                          )}
+                          <div className="flex items-center gap-3">
+                            <div className="flex gap-1.5">
+                              <span className="text-[7px] font-black px-2 py-0.5 rounded-md uppercase border border-primary/20 text-primary bg-primary/5">
+                                ASIGNADO
+                              </span>
+                              <span className={`flex items-center gap-1 text-[7px] font-black px-2 py-0.5 rounded-md uppercase border ${t.is_collaborative ? 'border-amber-200 text-amber-600 bg-amber-50' : 'border-emerald-200 text-emerald-600 bg-emerald-50'}`}>
+                                {t.is_collaborative ? <Users size={10} /> : <User size={10} />}
+                                {t.is_collaborative ? 'GRUPAL' : 'INDIVIDUAL'}
+                              </span>
+                            </div>
+                            {!isPlanningBlocked && (
+                              <button onClick={async () => {
+                                if (!window.confirm("¿Estás seguro de que deseas eliminar esta tarea asignada?")) return;
+                                await fetch(`/api/tareas/${t.id}`, { method: 'DELETE' });
+                                setDayTasks(prev => prev.filter(x => x.id !== t.id));
+                                fetchBacklog();
+                                fetchAllTasks();
+                                fetchDailyTasks();
+                              }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all p-2"
+                              title="Eliminar tarea asignada">
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1980,6 +1998,35 @@ export default function ConfigView2() {
                           {remainingHours.toFixed(1)}h Libres / {availableHours.toFixed(1)}h Totales
                         </span>
                       </div>
+
+                      {/* Mostrar Excepciones del día */}
+                      {(() => {
+                        let diaNombre = '';
+                        if (selectedPlanningDate) {
+                          const d = new Date(selectedPlanningDate + 'T00:00:00');
+                          const daysEs = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+                          diaNombre = daysEs[d.getDay()];
+                        }
+                        const dayBlocks = bloques.filter(b => b.fecha === selectedPlanningDate || b.dia_semana === diaNombre);
+                        if (dayBlocks.length === 0) return null;
+                        return (
+                          <div className="mt-4 pt-4 border-t border-slate-100">
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-2">Bloqueos Aplicados</span>
+                            <div className="space-y-2">
+                              {dayBlocks.map(b => (
+                                <div key={b.id} className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+                                    <span className="text-[9px] font-bold text-slate-600">{b.tipo}</span>
+                                  </div>
+                                  <span className="text-[8px] font-black text-slate-400">{b.hora_inicio} - {b.hora_fin}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                     </div>
                   </div>
 
@@ -2021,16 +2068,25 @@ export default function ConfigView2() {
                     )}
 
                     <div className="mt-auto pt-6 border-t border-slate-100">
-                      <button 
-                        onClick={handleCloseDay}
-                        className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-slate-900/20 flex items-center justify-center gap-2 group"
-                      >
-                        <CheckCircle size={16} className="group-hover:scale-110 transition-transform" />
-                        Cerrar Turno Diario
-                      </button>
-                      <p className="text-[8px] font-bold text-slate-400 text-center mt-3 uppercase tracking-wider">
-                        Las tareas no terminadas regresarán al backlog
-                      </p>
+                      {dailyPlans[selectedPlanningDate]?.estado_cierre === 1 ? (
+                        <div className="w-full py-4 bg-slate-100 text-slate-400 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 cursor-not-allowed">
+                          <CheckCircle size={16} />
+                          Turno Cerrado
+                        </div>
+                      ) : (
+                        <>
+                          <button 
+                            onClick={handleCloseDay}
+                            className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-slate-900/20 flex items-center justify-center gap-2 group"
+                          >
+                            <CheckCircle size={16} className="group-hover:scale-110 transition-transform" />
+                            Cerrar Turno Diario
+                          </button>
+                          <p className="text-[8px] font-bold text-slate-400 text-center mt-3 uppercase tracking-wider">
+                            Las tareas no terminadas regresarán al backlog
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2052,7 +2108,7 @@ export default function ConfigView2() {
              <div>
                 Visualización Semanal Operativa
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">
-                   Distribución de Jornada y Excepciones (L-V)
+                   Distribución de Jornada y Bloqueos (L-V)
                 </p>
              </div>
           </h2>
@@ -2133,7 +2189,7 @@ export default function ConfigView2() {
               }}
               className="px-6 py-3 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 w-full h-[48px]"
             >
-              <Plus size={16} /> Añadir Excepción
+              <Plus size={16} /> Bloquear Tiempo
             </button>
           </div>
         </div>
@@ -2252,13 +2308,14 @@ export default function ConfigView2() {
                    </div>
  
                    {/* Excepciones */}
+        {/* Excepciones */}
                    <div className="space-y-3 pt-2 border-t border-slate-50">
                      <div className="flex items-center justify-between">
                        <div className="flex items-center gap-2">
-                         <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Excepciones</span>
+                         <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Bloqueos</span>
                          <span className="text-[7px] font-black text-primary/30 px-1.5 py-0.5 bg-slate-50 rounded-md">{dayBlocks.length}</span>
                        </div>
-                       {!isClosed && (
+                       {true && (
                          <button 
                            onClick={(e) => {
                              e.stopPropagation();
@@ -2293,15 +2350,13 @@ export default function ConfigView2() {
                                  <div className="w-1.5 h-1.5 rounded-full bg-accent" />
                                  <span className="text-[8px] font-black text-slate-700 uppercase">{b.tipo}</span>
                                </div>
-                               {!isClosed && (
                                  <button 
                                    onClick={(e) => { e.stopPropagation(); deleteBloque(b.id); }} 
                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded-md transition-all"
-                                   title="Eliminar excepción"
+                                   title="Eliminar bloqueo"
                                  >
                                    <Trash2 size={10} />
                                  </button>
-                               )}
                              </div>
                              <div className="flex items-center gap-1.5">
                                <Clock size={9} className="text-slate-400" />
@@ -2310,9 +2365,31 @@ export default function ConfigView2() {
                            </div>
                          ))
                        ) : (
-                         <div className="py-6 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1 opacity-40">
-                           <span className="text-[7px] font-black text-slate-300 uppercase">Sin excepciones</span>
-                         </div>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setNewBlock({
+                                isRecurrente: false,
+                                dias: [],
+                                fecha: dateStr,
+                                fechaInicio: dateStr,
+                                fechaFin: dateStr,
+                                inicio: '13:00',
+                                fin: '14:00',
+                                tipo: 'Almuerzo',
+                                motivo: ''
+                              });
+                              setModalSource('card');
+                              setIsExcepcionGroupMode(false);
+                              setIsExcepcionModalOpen(true);
+                            }}
+                            className={`w-full py-6 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1 transition-all opacity-40 hover:opacity-100 hover:border-slate-300 hover:bg-slate-50 hover:text-primary cursor-pointer`}
+                            title={"Haz clic para añadir un bloqueo (ej. Almuerzo)"}
+                          >
+                            <span className="text-[7px] font-black text-inherit uppercase">
+                              + Añadir bloqueo
+                            </span>
+                          </button>
                        )}
                      </div>
                    </div>
@@ -2396,10 +2473,15 @@ export default function ConfigView2() {
                           </div>
                           <p className="text-[12px] font-black text-slate-800 uppercase tracking-tight leading-snug">{task.actividad}</p>
                           
-                          {task.is_collaborative && (
-                            <div className="flex items-center gap-1.5 py-1 px-2 bg-slate-100/50 rounded-lg w-fit">
-                              <Users size={10} className="text-slate-400" />
-                              <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">Colaborativa</span>
+                          {task.is_collaborative ? (
+                            <div className="flex items-center gap-1.5 py-1 px-2 bg-amber-50 border border-amber-200 rounded-lg w-fit">
+                              <Users size={10} className="text-amber-600" />
+                              <span className="text-[7px] font-black text-amber-600 uppercase tracking-widest">Grupal</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 py-1 px-2 bg-emerald-50 border border-emerald-200 rounded-lg w-fit">
+                              <User size={10} className="text-emerald-600" />
+                              <span className="text-[7px] font-black text-emerald-600 uppercase tracking-widest">Individual</span>
                             </div>
                           )}
 
