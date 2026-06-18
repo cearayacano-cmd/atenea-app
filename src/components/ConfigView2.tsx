@@ -1004,8 +1004,7 @@ export default function ConfigView2() {
       return { label, classes: `${config.badge} ${config.badgeBorder}` };
     }
 
-    const config = getStatusColor(task.status);
-    return { label: config.label, classes: `${config.badge} ${config.badgeBorder}` };
+    return { label: 'SIN ASIGNAR', classes: `bg-[#00D6CC] text-white border-[#00B5AD]` };
   };
 
   const getCardBgClass = (task: BacklogItem) => {
@@ -2463,6 +2462,9 @@ export default function ConfigView2() {
                           <div className="flex items-center justify-between">
                             <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">#{getTaskCode(task)}</span>
                             <div className="flex gap-1.5">
+                              <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase border ${getStatusColor(task.status || 'pendiente').badge} ${getStatusColor(task.status || 'pendiente').badgeBorder}`}>
+                                {getStatusColor(task.status || 'pendiente').label}
+                              </span>
                               <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase border ${badge.classes}`}>
                                 {badge.label}
                               </span>

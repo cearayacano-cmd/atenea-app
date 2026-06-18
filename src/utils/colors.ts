@@ -54,7 +54,7 @@ export const STATUS_COLORS: Record<string, StatusColorConfig> = {
     accent: 'bg-[#00D6CC]',
     cardBg: 'bg-[#00D6CC]/5',
     cardBorder: 'border-[#00D6CC]/25',
-    label: 'SIN ASIGNAR',
+    label: 'PENDIENTE',
     hex: '#00D6CC',
   },
   // EN ESPERA → Negro
