@@ -2463,9 +2463,6 @@ export default function ConfigView2() {
                           <div className="flex items-center justify-between">
                             <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">#{getTaskCode(task)}</span>
                             <div className="flex gap-1.5">
-                              <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase border ${getStatusColor(task.status || 'pendiente').badge} ${getStatusColor(task.status || 'pendiente').badgeBorder}`}>
-                                {getStatusColor(task.status || 'pendiente').label}
-                              </span>
                               <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase border ${badge.classes}`}>
                                 {badge.label}
                               </span>
