@@ -996,15 +996,16 @@ export default function ConfigView2() {
         statusKey = 'fallo';
         label = `${dateLabel}: Fallo`;
       } else {
-        statusKey = 'pendiente';
-        label = `ASIGNADO (${dateLabel})`;
+        // ASIGNADO -> Indigo LATAM
+        return { label: `ASIGNADO (${dateLabel})`, classes: `bg-[#4257E8] text-white border-[#1B0088]` };
       }
       
       const config = getStatusColor(statusKey);
       return { label, classes: `${config.badge} ${config.badgeBorder}` };
     }
 
-    return { label: 'SIN ASIGNAR', classes: `bg-[#00D6CC] text-white border-[#00B5AD]` };
+    // SIN ASIGNAR -> Plomo claro / Dashed
+    return { label: 'SIN ASIGNAR', classes: `bg-slate-50 text-slate-500 border-slate-300 border-dashed` };
   };
 
   const getCardBgClass = (task: BacklogItem) => {
