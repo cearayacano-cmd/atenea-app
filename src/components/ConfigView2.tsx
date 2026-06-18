@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Calendar, Clock, Trash2, Plus, Wand2, ListChecks, Database, ArrowRight, X, LayoutList, AlertTriangle, Archive, Users, User, ChevronDown, Zap, Bot } from 'lucide-react';
+import { Save, Calendar, Clock, Trash2, Plus, Wand2, ListChecks, Database, ArrowRight, X, LayoutList, AlertTriangle, Archive, Users, User, ChevronDown, Zap, Bot, Search, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getStatusColor, getPriorityColor } from '../utils/colors';
 
@@ -66,9 +66,60 @@ const toLocalYYYYMMDD = (d: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const getWeekNumber = (d: Date) => {
+  const date = new Date(d.getTime());
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+  const week1 = new Date(date.getFullYear(), 0, 4);
+  return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+};
+
+const getISOWeekString = (d: Date) => {
+  const w = getWeekNumber(d);
+  const date = new Date(d.getTime());
+  date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+  return `${date.getFullYear()}-W${w.toString().padStart(2, '0')}`;
+};
+
+const getDateFromWeek = (weekStr: string) => {
+  if (!weekStr) return new Date();
+  const [yearStr, weekPart] = weekStr.split('-W');
+  const y = parseInt(yearStr, 10);
+  const w = parseInt(weekPart, 10);
+  const simple = new Date(y, 0, 1 + (w - 1) * 7);
+  const dow = simple.getDay();
+  const ISOweekStart = simple;
+  if (dow <= 4)
+      ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+  else
+      ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+  return ISOweekStart;
+};
+
+const getDatesFromWeekRange = (startW: string, endW: string) => {
+  const dates = [];
+  if (!startW || !endW) return dates;
+  let currentMonday = getDateFromWeek(startW);
+  const lastMonday = getDateFromWeek(endW);
+  
+  if (currentMonday > lastMonday) return dates;
+
+  while (currentMonday <= lastMonday) {
+    for (let i = 0; i < 5; i++) { // Monday to Friday
+      const d = new Date(currentMonday);
+      d.setDate(currentMonday.getDate() + i);
+      dates.push(toLocalYYYYMMDD(d));
+    }
+    currentMonday.setDate(currentMonday.getDate() + 7);
+  }
+  return dates;
+};
+
 export default function ConfigView2() {
   const [startDate, setStartDate] = useState(toLocalYYYYMMDD(new Date()));
   const [endDate, setEndDate] = useState(toLocalYYYYMMDD(new Date()));
+  const [startWeek, setStartWeek] = useState(getISOWeekString(new Date()));
+  const [endWeek, setEndWeek] = useState(getISOWeekString(new Date()));
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('17:00');
   const [isSaving, setIsSaving] = useState(false);
@@ -77,8 +128,9 @@ export default function ConfigView2() {
   // Bloques y Jornadas
   const [bloques, setBloques] = useState<Bloque[]>([]);
   const [dailyPlans, setDailyPlans] = useState<Record<string, any>>({});
-  const [newBlock, setNewBlock] = useState({ isRecurrente: false, dias: [] as string[], fecha: toLocalYYYYMMDD(new Date()), inicio: '13:00', fin: '14:00', tipo: 'Almuerzo', motivo: '' });
+  const [newBlock, setNewBlock] = useState({ isRecurrente: false, dias: [] as string[], fechaInicio: toLocalYYYYMMDD(new Date()), fechaFin: toLocalYYYYMMDD(new Date()), inicio: '13:00', fin: '14:00', tipo: 'Almuerzo', motivo: '' });
   const [isExcepcionGroupMode, setIsExcepcionGroupMode] = useState(false);
+  const [jornadaDiasRecurrentes, setJornadaDiasRecurrentes] = useState<string[]>([]);
 
   // Backlog
   const [backlog, setBacklog] = useState<BacklogItem[]>([]);
@@ -88,7 +140,8 @@ export default function ConfigView2() {
   // Modales y Edición
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isJornadaModalOpen, setIsJornadaModalOpen] = useState(false);
-  const [isJornadaRangeMode, setIsJornadaRangeMode] = useState(false);
+  const [modalSource, setModalSource] = useState<'header' | 'card'>('header');
+  const [isJornadaRecurrente, setIsJornadaRecurrente] = useState(false);
   const [isExcepcionModalOpen, setIsExcepcionModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isPlanningModalOpen, setIsPlanningModalOpen] = useState(false);
@@ -120,6 +173,9 @@ export default function ConfigView2() {
   const [archiveTimeFilter, setArchiveTimeFilter] = useState('all');
   const [archivePage, setArchivePage] = useState(1);
   const archiveItemsPerPage = 5;
+
+  const [backlogSearch, setBacklogSearch] = useState('');
+  const [backlogFilterPriority, setBacklogFilterPriority] = useState<string | number>('Todos');
 
   useEffect(() => {
     if (isPlanningModalOpen && selectedPlanningDate) {
@@ -201,14 +257,6 @@ export default function ConfigView2() {
 
   const weekDates = getWeekDates(weekOffset);
   
-  const getWeekNumber = (d: Date) => {
-    const date = new Date(d.getTime());
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
-    const week1 = new Date(date.getFullYear(), 0, 4);
-    return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
-  };
-
   const currentWeekNumber = getWeekNumber(weekDates[0]);
 
   useEffect(() => {
@@ -513,20 +561,36 @@ export default function ConfigView2() {
     const end = pEnd || endTime;
     try {
       const dates = [];
-      let current = new Date(startDate + 'T00:00:00');
-      const last = new Date(endDate + 'T00:00:00');
-      while (current <= last) {
-        dates.push(toLocalYYYYMMDD(current));
-        current.setDate(current.getDate() + 1);
+      if (isJornadaRecurrente) {
+        // Generar fechas para las próximas 4 semanas según los días seleccionados
+        let current = new Date();
+        const endLoop = new Date();
+        endLoop.setDate(endLoop.getDate() + 28);
+        const diasSemanaMapa: Record<string, number> = { 'Domingo': 0, 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5, 'Sábado': 6 };
+        const allowedDays = jornadaDiasRecurrentes.map(d => diasSemanaMapa[d]);
+        while (current <= endLoop) {
+          if (allowedDays.includes(current.getDay())) {
+            dates.push(toLocalYYYYMMDD(current));
+          }
+          current.setDate(current.getDate() + 1);
+        }
+      } else {
+        if (modalSource === 'header') {
+          dates.push(...getDatesFromWeekRange(startWeek, endWeek));
+        } else {
+          dates.push(startDate);
+        }
       }
       
-      await Promise.all(dates.map(date => 
-        fetch('/api/plan-diario', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date, hora_inicio: start, hora_fin: end, horas_efectivas: 6 }),
-        })
-      ));
+      if (dates.length > 0) {
+        await Promise.all(dates.map(date => 
+          fetch('/api/plan-diario', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date, hora_inicio: start, hora_fin: end, horas_efectivas: 6 }),
+          })
+        ));
+      }
       setMessage('Horario actualizado');
       fetchDailyPlans();
       setTimeout(() => setMessage(''), 3000);
@@ -545,11 +609,14 @@ export default function ConfigView2() {
         });
       }
     } else {
-      await fetch('/api/bloques', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha: newBlock.fecha, hora_inicio: newBlock.inicio, hora_fin: newBlock.fin, tipo: newBlock.tipo, descripcion: newBlock.motivo }),
-      });
+      const datesToProcess = modalSource === 'header' ? getDatesFromWeekRange(startWeek, endWeek) : [newBlock.fechaInicio];
+      for (const date of datesToProcess) {
+        await fetch('/api/bloques', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fecha: date, hora_inicio: newBlock.inicio, hora_fin: newBlock.fin, tipo: newBlock.tipo, descripcion: newBlock.motivo }),
+        });
+      }
     }
     setNewBlock({ ...newBlock, dias: [], motivo: '' });
     fetchBloques();
@@ -703,7 +770,10 @@ export default function ConfigView2() {
     setIsCustomAiModalOpen(true);
   };
 
-  const deleteBacklog = (id: number) => fetch(`/api/backlog/${id}`, { method: 'DELETE' }).then(fetchBacklog);
+  const deleteBacklog = (id: number) => {
+    if (!window.confirm("¿Estás seguro de que deseas eliminar este ítem del backlog? Esta acción no se puede deshacer.")) return;
+    fetch(`/api/backlog/${id}`, { method: 'DELETE' }).then(fetchBacklog);
+  };
 
   const handleRestoreBacklog = async (id: number) => {
     await fetch(`/api/backlog/${id}`, {
@@ -724,7 +794,7 @@ export default function ConfigView2() {
   };
 
   const handleAssignToDayFromModal = async (task: any) => {
-    if (!selectedPlanningDate) return;
+    if (!selectedPlanningDate || isSaving) return;
 
     const unclosedDay = selectedPlanningDate ? getPastUnclosedDay(selectedPlanningDate) : null;
     if (unclosedDay) {
@@ -732,8 +802,21 @@ export default function ConfigView2() {
       return;
     }
 
+    if (Number(task.prioridad) === 10) {
+      const hasCriticalLocal = dayTasks.some((t: any) => Number(t.prioridad) === 10);
+      if (hasCriticalLocal) {
+        alert("❌ LÍMITE DE TAREA CRÍTICA: Solo puedes planificar una tarea crítica por día.");
+        return;
+      }
+    }
+
+    setIsSaving(true);
+
     const isValid = await validateCriticalTasksForDay(task, selectedPlanningDate);
-    if (!isValid) return;
+    if (!isValid) {
+      setIsSaving(false);
+      return;
+    }
     
     // Check capacity before adding
     const weights: Record<number, number> = { 10: 2, 7: 1.5, 4: 1, 2: 0.5 };
@@ -742,7 +825,10 @@ export default function ConfigView2() {
 
     if (remainingHours - taskWeight < 0) {
       const proceed = window.confirm("⚠️ CAPACIDAD ALCANZADA: Esta tarea superará tu jornada operativa. ¿Deseas agregarla de todas formas?");
-      if (!proceed) return;
+      if (!proceed) {
+        setIsSaving(false);
+        return;
+      }
     }
 
     try {
@@ -773,6 +859,34 @@ export default function ConfigView2() {
       fetchAllTasks();
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCloseDay = async () => {
+    if (!selectedPlanningDate) return;
+    if (!window.confirm("¿Estás seguro de cerrar tu jornada operativa? Las tareas no finalizadas se marcarán como rezagadas y regresarán a tu backlog para otro día.")) return;
+
+    try {
+      await fetch('/api/plan-diario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: selectedPlanningDate,
+          estado_cierre: 1
+        })
+      });
+
+      fetchDailyPlans();
+      fetchBacklog();
+      fetchAllTasks();
+      setIsPlanningModalOpen(false);
+      setMessage('Turno cerrado exitosamente.');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (error) {
+      console.error(error);
+      alert("Error al cerrar la jornada.");
     }
   };
 
@@ -925,17 +1039,19 @@ export default function ConfigView2() {
                 {/* 1. Rol y Área en Paralelo */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Rol que Ejecuta</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Estado</label>
                     <select 
-                      value={editingTask?.rol_ejecutante || 'Calidad Fabrica'} 
-                      onChange={e => {
-                        const newRole = e.target.value;
-                        setEditingTask({...editingTask, rol_ejecutante: newRole, actividad: ''});
-                      }}
+                      value={editingTask?.status || 'nuevo'} 
+                      onChange={e => setEditingTask({...editingTask, status: e.target.value})}
                       className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary"
                     >
-                      <option value="Calidad Fabrica">Calidad Fábrica</option>
-                      <option value="Calidad LATAM">Calidad LATAM</option>
+                      <option value="nuevo">Nuevo</option>
+                      <option value="abierto">Abierto</option>
+                      <option value="pendiente">Pendiente</option>
+                      <option value="en espera">En Espera</option>
+                      <option value="resuelto">Resuelto</option>
+                      <option value="despriorizado">Despriorizado</option>
+                      <option value="fallo">Fallo</option>
                     </select>
                   </div>
 
@@ -958,47 +1074,57 @@ export default function ConfigView2() {
                 {/* 2. Actividad (Predefinida o Libre) */}
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Actividad</label>
-                  <select 
-                    value={editingTask?.actividad || ''} 
-                    onChange={e => {
-                      const val = e.target.value;
-                      const role = editingTask?.rol_ejecutante || 'Calidad Fabrica';
-                      const template = MATRIZ_TAREAS[role]?.find(t => t.actividad === val);
-                      if (template) {
-                        setEditingTask({
-                          ...editingTask,
-                          actividad: val,
-                          complejidad: template.complejidad,
-                          tiempo_estimado: template.tiempo_estimado,
-                          area: template.area
-                        });
-                      } else {
-                        setEditingTask({
-                          ...editingTask,
-                          actividad: val,
-                          complejidad: 2,
-                          tiempo_estimado: 60
-                        });
-                      }
-                    }}
-                    className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary mb-1.5"
-                  >
-                    <option value="">-- Seleccionar Tarea del Catálogo --</option>
-                    {(MATRIZ_TAREAS[editingTask?.rol_ejecutante || 'Calidad Fabrica'] || []).map((t, i) => (
-                      <option key={i} value={t.actividad}>{t.actividad}</option>
-                    ))}
-                    <option value="Otro">Otra Actividad (Texto Libre)</option>
-                  </select>
-
-                  {editingTask?.actividad === 'Otro' || (editingTask?.actividad && !MATRIZ_TAREAS[editingTask?.rol_ejecutante || 'Calidad Fabrica']?.some(t => t.actividad === editingTask?.actividad)) ? (
+                  {!!editingTask?.id ? (
                     <textarea 
-                      value={editingTask?.actividad === 'Otro' ? '' : editingTask?.actividad} 
-                      onChange={e => setEditingTask({...editingTask, actividad: e.target.value})}
-                      placeholder="Escribe la descripción de la actividad..."
-                      className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary h-16 resize-none"
-                      required
+                      value={editingTask?.actividad || ''} 
+                      disabled
+                      className="w-full p-3 rounded-xl bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-500 outline-none h-16 resize-none cursor-not-allowed"
                     />
-                  ) : null}
+                  ) : (
+                    <>
+                      <select 
+                        value={editingTask?.actividad || ''} 
+                        onChange={e => {
+                          const val = e.target.value;
+                          const role = editingTask?.rol_ejecutante || 'Calidad Fabrica';
+                          const template = MATRIZ_TAREAS[role]?.find(t => t.actividad === val);
+                          if (template) {
+                            setEditingTask({
+                              ...editingTask,
+                              actividad: val,
+                              complejidad: template.complejidad,
+                              tiempo_estimado: template.tiempo_estimado,
+                              area: template.area
+                            });
+                          } else {
+                            setEditingTask({
+                              ...editingTask,
+                              actividad: val,
+                              complejidad: 2,
+                              tiempo_estimado: 60
+                            });
+                          }
+                        }}
+                        className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary mb-1.5"
+                      >
+                        <option value="">-- Seleccionar Tarea del Catálogo --</option>
+                        {(MATRIZ_TAREAS[editingTask?.rol_ejecutante || 'Calidad Fabrica'] || []).map((t, i) => (
+                          <option key={i} value={t.actividad}>{t.actividad}</option>
+                        ))}
+                        <option value="Otro">Otra Actividad (Texto Libre)</option>
+                      </select>
+
+                      {editingTask?.actividad === 'Otro' || (editingTask?.actividad && !MATRIZ_TAREAS[editingTask?.rol_ejecutante || 'Calidad Fabrica']?.some(t => t.actividad === editingTask?.actividad)) ? (
+                        <textarea 
+                          value={editingTask?.actividad === 'Otro' ? '' : editingTask?.actividad} 
+                          onChange={e => setEditingTask({...editingTask, actividad: e.target.value})}
+                          placeholder="Escribe la descripción de la actividad..."
+                          className="w-full p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-700 outline-none focus:border-primary h-16 resize-none"
+                          required
+                        />
+                      ) : null}
+                    </>
+                  )}
                 </div>
 
                 {/* 3. Complejidad y Colaborativo en Paralelo */}
@@ -1127,25 +1253,40 @@ export default function ConfigView2() {
               </div>
               <div className="p-6 space-y-6">
                 <div className="flex bg-slate-100 p-1.5 rounded-xl gap-1 mb-4">
-                  <button onClick={() => setIsJornadaRangeMode(false)} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!isJornadaRangeMode ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Día Único</button>
-                  <button onClick={() => setIsJornadaRangeMode(true)} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${isJornadaRangeMode ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Rango de Días</button>
+                  <button onClick={() => setIsJornadaRecurrente(false)} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!isJornadaRecurrente ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>
+                    {modalSource === 'card' ? 'Día Único' : 'Por Semana'}
+                  </button>
+                  <button onClick={() => setIsJornadaRecurrente(true)} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${isJornadaRecurrente ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Recurrente</button>
                 </div>
 
-                {isJornadaRangeMode ? (
-                  <div className="grid grid-cols-2 gap-4">
+                {!isJornadaRecurrente ? (
+                  modalSource === 'card' ? (
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha Desde</label>
-                      <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha</label>
+                      <input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); setEndDate(e.target.value); }} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha Hasta</label>
-                      <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Semana Desde</label>
+                        <input type="week" value={startWeek} onChange={e => setStartWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Semana Hasta</label>
+                        <input type="week" value={endWeek} onChange={e => setEndWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                      </div>
                     </div>
-                  </div>
+                  )
                 ) : (
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha</label>
-                    <input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); setEndDate(e.target.value); }} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Días de la semana</label>
+                    <div className="flex justify-between gap-1.5">
+                      {DIAS.map(d => (
+                        <button key={d} onClick={() => setJornadaDiasRecurrentes(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])} className={`flex-1 h-9 rounded-xl text-[11px] font-black border transition-all ${jornadaDiasRecurrentes.includes(d) ? 'bg-primary text-white border-primary' : 'bg-slate-50 text-slate-400 border-slate-200 hover:border-primary/30'}`}>
+                          {d.charAt(0)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -1188,7 +1329,9 @@ export default function ConfigView2() {
               </div>
               <div className="p-6 space-y-6">
                 <div className="flex bg-slate-100 p-1.5 rounded-xl gap-1">
-                  <button onClick={() => { setIsExcepcionGroupMode(false); setNewBlock({...newBlock, isRecurrente: false}); }} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!isExcepcionGroupMode ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Día Único</button>
+                  <button onClick={() => { setIsExcepcionGroupMode(false); setNewBlock({...newBlock, isRecurrente: false}); }} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!isExcepcionGroupMode ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>
+                    {modalSource === 'card' ? 'Día Único' : 'Por Semana'}
+                  </button>
                   <button onClick={() => { setIsExcepcionGroupMode(true); setNewBlock({...newBlock, isRecurrente: true}); }} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${isExcepcionGroupMode ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Recurrente</button>
                 </div>
                 
@@ -1202,7 +1345,23 @@ export default function ConfigView2() {
                       ))}
                     </div>
                   ) : (
-                    <input type="date" value={newBlock.fecha} onChange={e => setNewBlock({...newBlock, fecha: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none" />
+                    modalSource === 'card' ? (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha</label>
+                        <input type="date" value={newBlock.fechaInicio} onChange={e => setNewBlock({...newBlock, fechaInicio: e.target.value, fechaFin: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none" />
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Semana Desde</label>
+                          <input type="week" value={startWeek} onChange={e => setStartWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Semana Hasta</label>
+                          <input type="week" value={endWeek} onChange={e => setEndWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                        </div>
+                      </div>
+                    )
                   )}
                   
                   <div className="grid grid-cols-2 gap-4">
@@ -1536,7 +1695,7 @@ export default function ConfigView2() {
       <AnimatePresence>
         {isPlanningModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden border border-white/20">
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative bg-white rounded-3xl shadow-2xl w-[95vw] h-[95vh] flex flex-col overflow-hidden border border-white/20">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-primary text-white">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-md">
@@ -1587,31 +1746,84 @@ export default function ConfigView2() {
                 <div className="flex-1 flex overflow-hidden">
                 {/* 1. Panel Izquierdo: Backlog Disponible (Oculto/Borrado si está bloqueado) */}
                 <div className={`w-1/3 flex flex-col border-r border-slate-200 bg-white transition-opacity ${isPlanningBlocked ? 'opacity-30 pointer-events-none' : ''}`}>
-                   <div className="p-5 border-b border-slate-100">
-                     <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                        <Database size={14} className="text-primary" />
-                        Backlog Disponible
-                     </h4>
-                     <p className="text-[9px] font-bold text-slate-400 mt-1">Actividades esperando ser programadas.</p>
+                   <div className="p-5 border-b border-slate-100 flex flex-col gap-3">
+                     <div>
+                       <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                          <Database size={14} className="text-primary" />
+                          Backlog Disponible
+                       </h4>
+                       <p className="text-[9px] font-bold text-slate-400 mt-1">Actividades esperando ser programadas.</p>
+                     </div>
+                     <div className="relative">
+                       <Search size={12} className="absolute left-2.5 top-2.5 text-slate-400" />
+                       <input 
+                         type="text" 
+                         placeholder="Buscar tarea..." 
+                         value={backlogSearch}
+                         onChange={(e) => setBacklogSearch(e.target.value)}
+                         className="w-full pl-8 pr-3 py-2 text-[10px] font-bold bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+                       />
+                     </div>
+                     <div className="flex flex-wrap gap-1">
+                        <button
+                          onClick={() => setBacklogFilterPriority('Todos')}
+                          className={`px-2 py-1 rounded text-[8px] font-black uppercase transition-all ${backlogFilterPriority === 'Todos' ? 'bg-primary text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                        >
+                          TODOS
+                        </button>
+                        {PRIORITIES.map(p => (
+                          <button
+                            key={p.value}
+                            onClick={() => setBacklogFilterPriority(p.value)}
+                            className={`px-2 py-1 rounded text-[8px] font-black uppercase transition-all ${backlogFilterPriority === p.value ? p.color + ' text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                     </div>
                    </div>
                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
                      {backlog
                        .filter(t => !['resuelto', 'terminada', 'despriorizado', 'fallo', 'fallido'].includes(t.status))
                        .filter(t => !dayTasks.some(dt => dt.backlog_id === t.id))
-                       .map(task => (
-                        <div key={task.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-primary/30 transition-all group flex flex-col gap-2 relative overflow-hidden">
-                          <div className="flex items-center justify-between">
-                             <span className="text-[7px] font-black bg-white text-slate-400 px-2 py-0.5 rounded-md uppercase border border-slate-100">{task.area || 'Gral'}</span>
-                              {(() => {
-                                const prio = getPriorityColor(task.prioridad);
-                                return (
-                                  <span className={`text-[7px] font-black px-2 py-0.5 rounded-full uppercase shadow-sm ${prio.badge}`}>
-                                    {prio.label}
-                                  </span>
-                                );
-                              })()}
+                       .filter(t => backlogFilterPriority === 'Todos' || t.prioridad === backlogFilterPriority)
+                       .filter(t => !backlogSearch || t.actividad.toLowerCase().includes(backlogSearch.toLowerCase()))
+                       .sort((a, b) => {
+                         const aLeftover = allTasks.some(t => t.backlog_id === a.id && t.fecha < selectedPlanningDate && !['resuelto', 'terminada'].includes((t.estado_ejecucion || '').toLowerCase()));
+                         const bLeftover = allTasks.some(t => t.backlog_id === b.id && t.fecha < selectedPlanningDate && !['resuelto', 'terminada'].includes((t.estado_ejecucion || '').toLowerCase()));
+                         
+                         if (aLeftover && !bLeftover) return -1;
+                         if (!aLeftover && bLeftover) return 1;
+                         
+                         if (a.prioridad !== b.prioridad) return b.prioridad - a.prioridad;
+                         return (b.antiguedad || 0) - (a.antiguedad || 0);
+                       })
+                       .map(task => {
+                         const isLeftover = allTasks.some(t => t.backlog_id === task.id && t.fecha < selectedPlanningDate && !['resuelto', 'terminada'].includes((t.estado_ejecucion || '').toLowerCase()));
+                         return (
+                         <div key={task.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-primary/30 transition-all group flex flex-col gap-2 relative overflow-hidden">
+                           {isLeftover && (
+                             <div className="bg-amber-100 text-amber-700 text-[8px] font-black uppercase px-2 py-1 rounded-md self-start flex items-center gap-1 mb-1">
+                               <AlertTriangle size={10} /> Sugerencia: Del día anterior
+                             </div>
+                           )}
+                           <div className="flex items-center justify-between">
+                              <span className="text-[7px] font-black bg-white text-slate-400 px-2 py-0.5 rounded-md uppercase border border-slate-100">{task.area || 'Gral'}</span>
+                              <div className="flex gap-1.5">
+                                <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase border border-slate-200 text-slate-500 bg-white`}>
+                                  {task.status || 'PENDIENTE'}
+                                </span>
+                                {(() => {
+                                  const prio = getPriorityColor(task.prioridad);
+                                  return (
+                                    <span className={`text-[7px] font-black px-2 py-0.5 rounded-full uppercase shadow-sm ${prio.badge}`}>
+                                      {prio.label}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                           </div>
-                          <p className="text-[10px] font-bold text-slate-700 leading-snug pr-4">{task.actividad}</p>
+                          <p className="text-[12px] font-bold text-slate-700 leading-snug pr-4">{task.actividad}</p>
                           
                           {/* Hover Layer to Add */}
                           <div className="absolute inset-0 bg-primary/95 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
@@ -1623,7 +1835,8 @@ export default function ConfigView2() {
                             </button>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                      {backlog.filter(t => !['resuelto', 'terminada', 'despriorizado', 'fallo', 'fallido'].includes(t.status)).filter(t => !dayTasks.some(dt => dt.backlog_id === t.id)).length === 0 && (
                        <div className="text-center p-6 text-[10px] font-bold text-slate-400">No hay tareas activas en el backlog.</div>
                      )}
@@ -1714,10 +1927,11 @@ export default function ConfigView2() {
                                 );
                               })()}
                             </div>
-                            <span className="text-[11px] font-bold text-slate-700">{t.actividad}</span>
+                            <span className="text-[13px] font-bold text-slate-700">{t.actividad}</span>
                           </div>
                           {!isPlanningBlocked && (
                             <button onClick={async () => {
+                              if (!window.confirm("¿Estás seguro de que deseas eliminar esta tarea asignada?")) return;
                               await fetch(`/api/tareas/${t.id}`, { method: 'DELETE' });
                               setDayTasks(prev => prev.filter(x => x.id !== t.id));
                               fetchBacklog();
@@ -1805,6 +2019,19 @@ export default function ConfigView2() {
                         </p>
                       </div>
                     )}
+
+                    <div className="mt-auto pt-6 border-t border-slate-100">
+                      <button 
+                        onClick={handleCloseDay}
+                        className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-slate-900/20 flex items-center justify-center gap-2 group"
+                      >
+                        <CheckCircle size={16} className="group-hover:scale-110 transition-transform" />
+                        Cerrar Turno Diario
+                      </button>
+                      <p className="text-[8px] font-bold text-slate-400 text-center mt-3 uppercase tracking-wider">
+                        Las tareas no terminadas regresarán al backlog
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1830,6 +2057,24 @@ export default function ConfigView2() {
              </div>
           </h2>
         </div>
+        
+        {/* Welcome Widget */}
+        {(() => {
+          const currentUserId = Number(localStorage.getItem('atenea_user_id') || 1);
+          const currentUser = usersList.find(u => u.id === currentUserId);
+          if (!currentUser) return null;
+          return (
+            <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-black shadow-md">
+                {currentUser.nombre.charAt(0)}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">¡Bienvenido!</span>
+                <span className="text-sm font-bold text-slate-800">{currentUser.nombre}</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="latam-card !p-8 bg-white border border-slate-100 shadow-2xl shadow-slate-200/40 rounded-[40px]">
@@ -1855,7 +2100,13 @@ export default function ConfigView2() {
           <div className="flex flex-col gap-2">
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">2. Jornada Laboral Base</span>
             <button 
-              onClick={() => { setIsJornadaRangeMode(true); setIsJornadaModalOpen(true); }}
+              onClick={() => { 
+                setStartWeek(getISOWeekString(weekDates[0])); 
+                setEndWeek(getISOWeekString(weekDates[0])); 
+                setModalSource('header'); 
+                setIsJornadaRecurrente(false); 
+                setIsJornadaModalOpen(true); 
+              }}
               className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-2xl hover:border-primary/40 hover:bg-white transition-all flex items-center gap-3 group w-full h-[48px]"
             >
               <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all shrink-0">
@@ -1873,7 +2124,11 @@ export default function ConfigView2() {
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">3. Bloques Especiales</span>
             <button 
               onClick={() => {
-                setIsExcepcionGroupMode(true);
+                setStartWeek(getISOWeekString(weekDates[0])); 
+                setEndWeek(getISOWeekString(weekDates[0])); 
+                setModalSource('header');
+                setIsExcepcionGroupMode(false);
+                setNewBlock({...newBlock, isRecurrente: false});
                 setIsExcepcionModalOpen(true);
               }}
               className="px-6 py-3 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 w-full h-[48px]"
@@ -1908,6 +2163,8 @@ export default function ConfigView2() {
             const completedTasks = dayTasksForUser.filter(t => ['resuelto', 'terminada'].includes((t.estado_ejecucion || '').toLowerCase())).length;
             const pendingTasks = totalTasks - completedTasks;
 
+            const isPast = dateStr < toLocalYYYYMMDD(new Date());
+
             return (
               <div 
                 key={diaNombre} 
@@ -1916,10 +2173,14 @@ export default function ConfigView2() {
                 onDrop={e => isToday && handleDropToDay(e, dateStr)}
                 onClick={() => {
                   if (isFuture) return;
+                  if (isPast) {
+                    alert("🚫 PLANIFICACIÓN RESTRINGIDA: No puedes agendar ni modificar tareas en días pasados. Por favor, selecciona el día de HOY para asignar tus actividades.");
+                    return;
+                  }
                   setSelectedPlanningDate(dateStr); 
                   setIsPlanningModalOpen(true); 
                 }}
-                className={`flex flex-col rounded-2xl border overflow-hidden transition-all relative group ${isFuture ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-md'} ${isToday ? 'border-primary ring-2 ring-primary/20 shadow-lg scale-[1.02] z-10 bg-white' : 'border-slate-100 bg-slate-50/50'}`}
+                className={`flex flex-col rounded-2xl border overflow-hidden transition-all relative group ${(isFuture || isPast) ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-md'} ${isToday ? 'border-primary ring-2 ring-primary/20 shadow-lg scale-[1.02] z-10 bg-white' : 'border-slate-100 bg-slate-50/50'}`}
               >
                 {isFuture && (
                   <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-end pb-4 bg-slate-50/10">
@@ -1947,7 +2208,8 @@ export default function ConfigView2() {
                        const plan = dailyPlans[dateStr];
                        setStartTime(plan?.hora_inicio || '08:00');
                        setEndTime(plan?.hora_fin || '17:00');
-                       setIsJornadaRangeMode(false);
+                       setModalSource('card');
+                       setIsJornadaRecurrente(false);
                        setIsJornadaModalOpen(true);
                      }}
                      className={`relative pl-3 border-l-2 p-2 ${isClosed ? 'border-slate-200 cursor-default' : 'border-primary/20 hover:bg-primary/5 cursor-pointer group/jornada'}`}
@@ -1963,7 +2225,7 @@ export default function ConfigView2() {
                       <div className="flex items-center gap-2 mt-1">
                         <Clock size={10} className="text-primary/60" />
                         <span className="text-[10px] font-black text-slate-700">
-                          {dailyPlans[dateStr]?.hora_inicio || '08:00'} - {dailyPlans[dateStr]?.hora_fin || '17:00'}
+                          {dailyPlans[dateStr] ? `${dailyPlans[dateStr].hora_inicio} - ${dailyPlans[dateStr].hora_fin}` : 'Sin configurar'}
                         </span>
                       </div>
                     </div>
@@ -1977,14 +2239,12 @@ export default function ConfigView2() {
                            <span>Asignadas:</span>
                            <span className="font-black text-slate-800">{totalTasks}</span>
                          </div>
-                         <div className="flex items-center justify-between text-[9px] text-slate-500">
-                           <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Resueltas:</span>
-                           <span className="font-bold text-emerald-600">{completedTasks}</span>
-                         </div>
-                         <div className="flex items-center justify-between text-[9px] text-slate-500">
-                           <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Pendientes:</span>
-                           <span className="font-bold text-amber-600">{pendingTasks}</span>
-                         </div>
+                         {pendingTasks > 0 && (
+                           <div className="flex items-center justify-between text-[9px] text-slate-500">
+                             <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Pendientes:</span>
+                             <span className="font-bold text-amber-600">{pendingTasks}</span>
+                           </div>
+                         )}
                        </div>
                      ) : (
                        <span className="text-[9px] font-medium text-slate-400 italic block mt-1">Sin tareas agendadas</span>
@@ -2006,11 +2266,14 @@ export default function ConfigView2() {
                                isRecurrente: false,
                                dias: [],
                                fecha: dateStr,
+                               fechaInicio: dateStr,
+                               fechaFin: dateStr,
                                inicio: '13:00',
                                fin: '14:00',
                                tipo: 'Almuerzo',
                                motivo: ''
                              });
+                             setModalSource('card');
                              setIsExcepcionGroupMode(false);
                              setIsExcepcionModalOpen(true);
                            }}
@@ -2123,13 +2386,15 @@ export default function ConfigView2() {
                           <div className="flex items-center justify-between">
                             <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">#{getTaskCode(task)}</span>
                             <div className="flex gap-1.5">
+                              <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase border border-slate-200 text-slate-500 bg-white`}>
+                                {task.status || 'PENDIENTE'}
+                              </span>
                               <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase border ${badge.classes}`}>
                                 {badge.label}
                               </span>
-                              <span className="text-[8px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded uppercase border border-slate-100">{task.rol_ejecutante || 'Calidad Fabrica'}</span>
                             </div>
                           </div>
-                          <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight leading-snug">{task.actividad}</p>
+                          <p className="text-[12px] font-black text-slate-800 uppercase tracking-tight leading-snug">{task.actividad}</p>
                           
                           {task.is_collaborative && (
                             <div className="flex items-center gap-1.5 py-1 px-2 bg-slate-100/50 rounded-lg w-fit">

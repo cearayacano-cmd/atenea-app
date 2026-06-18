@@ -500,10 +500,10 @@ async function startServer() {
     db.transaction(() => {
       let currentBacklogId = backlog_id;
       if (!currentBacklogId) {
-        const bgRes = db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area, created_at) VALUES (?, ?, ?, ?, ?)").run(actividad, prioridad, 'progreso', area || 'Operativo', finalCreatedAt);
+        const bgRes = db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area, created_at) VALUES (?, ?, ?, ?, ?)").run(actividad, prioridad, 'abierto', area || 'Operativo', finalCreatedAt);
         currentBacklogId = bgRes.lastInsertRowid;
       } else {
-        db.prepare("UPDATE Backlog SET status = 'progreso' WHERE id = ?").run(currentBacklogId);
+        db.prepare("UPDATE Backlog SET status = 'abierto' WHERE id = ?").run(currentBacklogId);
       }
 
       const stmt = db.prepare("INSERT INTO Tareas (fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area, user_id, complejidad, created_at, assigned_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -692,21 +692,23 @@ async function startServer() {
     // Backlog Sync on closure
     if (e_cierre === 1) {
       const tasksToSync = db.prepare(`
-        SELECT backlog_id, estado_ejecucion 
+        SELECT id, backlog_id, estado_ejecucion 
         FROM Tareas 
         WHERE fecha = ? AND backlog_id IS NOT NULL
       `).all(date);
 
+      const nowStr = new Date().toISOString();
+
       for (const task of tasksToSync) {
-        let backlogStatus = task.estado_ejecucion;
-        if (backlogStatus === 'no realizado' || backlogStatus === 'fallo' || backlogStatus === 'fallido' || !backlogStatus) {
-          backlogStatus = 'pendiente';
-        } else if (backlogStatus === 'despriorizada') {
-          backlogStatus = 'despriorizado';
-        } else if (backlogStatus === 'resuelto' || backlogStatus === 'terminada') {
-          backlogStatus = 'terminada';
+        const estado = (task.estado_ejecucion || '').toLowerCase();
+        
+        if (estado === 'resuelto' || estado === 'terminada') {
+          db.prepare("UPDATE Backlog SET status = 'resuelto' WHERE id = ?").run(task.backlog_id);
+        } else {
+          // Reasignamos al backlog y marcamos como rezagado
+          db.prepare("UPDATE Tareas SET estado_ejecucion = 'rezagado', updated_at = ? WHERE id = ?").run(nowStr, task.id);
+          db.prepare("UPDATE Backlog SET status = 'pendiente' WHERE id = ?").run(task.backlog_id);
         }
-        db.prepare("UPDATE Backlog SET status = ? WHERE id = ?").run(backlogStatus, task.backlog_id);
       }
     }
 
