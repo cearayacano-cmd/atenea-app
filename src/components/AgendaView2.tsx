@@ -349,7 +349,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
     setLoading(true);
     try {
       const userId = Number(localStorage.getItem('atenea_user_id') || 1);
-      const res = await fetch(`/api/tareas?userId=${userId}&fecha=${selectedDate}`);
+      const res = await fetch(`/api/tareas?userId=${userId}&fecha=${selectedDate}&_t=${Date.now()}`);
       const data = await res.json();
       const tasksList = Array.isArray(data.tasks) ? data.tasks : [];
       setTasks(tasksList.map((t: any) => ({
@@ -360,18 +360,18 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
       setPlan(data.plan || null);
       
       try {
-        const backlogRes = await fetch('/api/backlog');
+        const backlogRes = await fetch(`/api/backlog?userId=${userId}&_t=${Date.now()}`);
         const backlogData = await backlogRes.json();
         setBacklog(Array.isArray(backlogData) ? backlogData : []);
       } catch (e) {
         console.error("Error fetching backlog in AgendaView2:", e);
       }
       
-      const incRes = await fetch(`/api/incidencias?fecha=${selectedDate}`);
+      const incRes = await fetch(`/api/incidencias?fecha=${selectedDate}&_t=${Date.now()}`);
       const incData = await incRes.json();
       setIncidencias(Array.isArray(incData) ? incData : []);
 
-      const bloqRes = await fetch('/api/bloques');
+      const bloqRes = await fetch(`/api/bloques?_t=${Date.now()}`);
       const bloqData = await bloqRes.json();
       
       // Filtrar bloques por fecha específica o día de la semana
@@ -400,7 +400,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
       const historyData = await Promise.all(
         last7Days.map(async (dStr) => {
           const userId = Number(localStorage.getItem('atenea_user_id') || 1);
-          const tRes = await fetch(`/api/tareas?userId=${userId}&fecha=${dStr}`);
+          const tRes = await fetch(`/api/tareas?userId=${userId}&fecha=${dStr}&_t=${Date.now()}`);
           const tData = await tRes.json();
           const dayTasks: any[] = tData.tasks || [];
           
@@ -410,7 +410,7 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
             return acc + (isExecuted ? (Number(t.prioridad) || 0) : 0);
           }, 0);
           
-          const iRes = await fetch(`/api/incidencias?fecha=${dStr}`);
+          const iRes = await fetch(`/api/incidencias?fecha=${dStr}&_t=${Date.now()}`);
           const dayInc: any[] = await iRes.json();
           const opMins = dayInc.reduce((acc, inc) => {
             const [h1, m1] = inc.hora_inicio.split(':').map(Number);

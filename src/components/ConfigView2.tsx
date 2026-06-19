@@ -189,7 +189,7 @@ export default function ConfigView2() {
 
     try {
       const userId = Number(localStorage.getItem('atenea_user_id') || 1);
-      const res = await fetch(`/api/tareas?userId=${userId}&fecha=${prevDate}`);
+      const res = await fetch(`/api/tareas?userId=${userId}&fecha=${prevDate}&_t=${Date.now()}`);
       const data = await res.json();
       
       if (data.tasks) {
@@ -859,7 +859,7 @@ export default function ConfigView2() {
 
       setPendingSuggestions(prev => prev.filter(p => p.id !== task.id));
       const userId = Number(localStorage.getItem('atenea_user_id') || 1);
-      const dayTasksRes = await fetch(`/api/tareas?userId=${userId}&fecha=${selectedPlanningDate}`);
+      const dayTasksRes = await fetch(`/api/tareas?userId=${userId}&fecha=${selectedPlanningDate}&_t=${Date.now()}`);
       if (dayTasksRes.ok) {
          const data = await dayTasksRes.json();
          if (Array.isArray(data)) setDayTasks(data);
