@@ -45,6 +45,7 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [usersList, setUsersList] = useState<UserInfo[]>([]);
   const [isDemoData, setIsDemoData] = useState(false);
+  const [planesDiarios, setPlanesDiarios] = useState<any[]>([]);
   
   // Navigation offsets
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, -1 = last week
@@ -127,6 +128,11 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
         const incRes = await fetch(`/api/incidencias?userId=${userQuery === 'all' ? 1 : userQuery}&fechaInicio=${startStr}&fechaFin=${endStr}`);
         const incList = await incRes.json();
         const incData = Array.isArray(incList) ? incList : [];
+
+        // Fetch Planes Diarios
+        const planesRes = await fetch('/api/planes-diarios');
+        const planesList = await planesRes.json();
+        const planesData = Array.isArray(planesList) ? planesList : [];
 
         if (tasksList.length === 0) {
           setIsDemoData(true);
@@ -252,6 +258,7 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
           setTasks(tasksList);
           setIncidencias(incData);
         }
+        setPlanesDiarios(planesData);
 
       } catch (err) {
         console.error("Error loading dashboard data:", err);
@@ -400,6 +407,23 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
     }
   };
 
+  // Generate Calendar Days for Macro View
+  const getCalendarDays = () => {
+    const start = tab === 'semanal' ? getWeekRange(weekOffset).monday : getMonthRange(monthOffset).startOfMonth;
+    const end = tab === 'semanal' ? getWeekRange(weekOffset).friday : getMonthRange(monthOffset).endOfMonth;
+    const days = [];
+    let curr = new Date(start);
+    while (curr <= end) {
+      if (curr.getDay() !== 0 && curr.getDay() !== 6) { // Only Mon-Fri
+        days.push(new Date(curr));
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+    return days;
+  };
+
+  const calendarDays = getCalendarDays();
+
   return (
     <div className="space-y-8 pb-16 w-full">
       {/* Header premium con fondo claro integrado */}
@@ -488,6 +512,40 @@ export default function DashboardView2({ selectedDate, setSelectedDate }: {
               <span className="text-[8px] bg-amber-200/50 px-2 py-0.5 rounded font-black text-amber-700">Simulación</span>
             </div>
           )}
+
+          {/* Macro View: Calendario de Turnos */}
+          <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-xl shadow-slate-200/20">
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-6">Estado de Turnos del Periodo</h3>
+            <div className="grid grid-cols-5 md:grid-cols-5 lg:grid-cols-10 gap-3">
+              {calendarDays.map((d) => {
+                const dateStr = d.toISOString().split('T')[0];
+                const dayTasks = tasks.filter(t => t.fecha === dateStr);
+                const dayPlan = planesDiarios.find(p => p.date === dateStr && (selectedFilterUserId === 'all' ? true : p.user_id === Number(selectedFilterUserId)));
+                
+                let status = 'inactivo';
+                if (dayTasks.length > 0) {
+                  status = (dayPlan && dayPlan.estado_cierre === 1) ? 'cerrado' : 'pendiente';
+                }
+
+                return (
+                  <div key={dateStr} className={`p-3 rounded-2xl border ${
+                    status === 'inactivo' ? 'bg-slate-50 border-slate-100 text-slate-400' :
+                    status === 'cerrado' ? 'bg-emerald-50 border-emerald-100 text-emerald-600 shadow-sm shadow-emerald-100' :
+                    'bg-rose-50 border-rose-200 text-rose-600 shadow-sm shadow-rose-100'
+                  } flex flex-col items-center justify-center gap-1.5 text-center transition-all hover:scale-105`}>
+                    <span className="text-[11px] font-black uppercase tracking-widest">{d.toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' })} {d.getUTCDate()}</span>
+                    <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                      status === 'inactivo' ? 'bg-slate-200/50' :
+                      status === 'cerrado' ? 'bg-emerald-200/50' :
+                      'bg-rose-200/50'
+                    }`}>
+                      {status === 'inactivo' ? 'Inactivo' : status === 'cerrado' ? 'Cerrado' : 'Sin Cerrar'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           
           {/* Fila de 4 Indicadores Premium de Foco */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

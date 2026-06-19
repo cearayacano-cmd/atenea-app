@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Calendar, Clock, Link as LinkIcon, Paperclip, AlertTriangle, CheckCircle2, Circle, ChevronDown, ChevronUp, Sparkles, Loader2, History } from 'lucide-react';
+import { Search, Filter, Calendar, Clock, Link as LinkIcon, Paperclip, AlertTriangle, CheckCircle2, Circle, ChevronDown, ChevronUp, Sparkles, Loader2, History, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { getStatusColor, getPriorityColor } from '../utils/colors';
@@ -33,6 +33,7 @@ export default function HistoryView() {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterArea, setFilterArea] = useState('all');
+  const [filterDate, setFilterDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedTasks, setExpandedTasks] = useState<string[]>([]);
   const [reports, setReports] = useState<Record<string, string>>({});
@@ -142,7 +143,15 @@ export default function HistoryView() {
     const matchesArea = filterArea === 'all' || task.area === filterArea;
     const matchesSearch = task.actividad.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.hallazgos.some(h => h.text.toLowerCase().includes(searchTerm.toLowerCase()));
-    return matchesStatus && matchesArea && matchesSearch;
+      
+    let matchesDate = true;
+    if (filterDate) {
+      matchesDate = task.fechas.some(f => f.startsWith(filterDate)) || 
+                    task.hallazgos.some(h => h.fecha.startsWith(filterDate)) ||
+                    task.evidencias.some(e => e.fecha.startsWith(filterDate));
+    }
+
+    return matchesStatus && matchesArea && matchesSearch && matchesDate;
   });
 
   return (
@@ -187,6 +196,21 @@ export default function HistoryView() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-12 pr-6 py-3 rounded-2xl bg-slate-50 border-none outline-none focus:ring-2 focus:ring-[#99CC33]/20 w-full md:w-64 text-sm font-bold text-slate-700 transition-all"
             />
+          </div>
+
+          <div className="flex items-center gap-2 bg-slate-50 px-4 py-3 rounded-2xl border border-transparent hover:border-slate-200 transition-all cursor-pointer">
+            <Calendar size={16} className="text-slate-400" />
+            <input 
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="bg-transparent outline-none text-xs font-black text-slate-600 uppercase tracking-widest cursor-pointer"
+            />
+            {filterDate && (
+              <button onClick={() => setFilterDate('')} className="text-slate-400 hover:text-rose-500 transition-colors">
+                <X size={14} />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 bg-slate-50 px-4 py-3 rounded-2xl border border-transparent hover:border-slate-200 transition-all cursor-pointer">

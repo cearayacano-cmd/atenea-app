@@ -96,21 +96,20 @@ const getDateFromWeek = (weekStr: string) => {
   return ISOweekStart;
 };
 
-const getDatesFromWeekRange = (startW: string, endW: string) => {
+const getDatesFromWeekRange = (startD: string, endD: string) => {
   const dates = [];
-  if (!startW || !endW) return dates;
-  let currentMonday = getDateFromWeek(startW);
-  const lastMonday = getDateFromWeek(endW);
+  if (!startD || !endD) return dates;
+  let current = new Date(startD + 'T00:00:00');
+  const last = new Date(endD + 'T00:00:00');
   
-  if (currentMonday > lastMonday) return dates;
+  if (current > last) return dates;
 
-  while (currentMonday <= lastMonday) {
-    for (let i = 0; i < 5; i++) { // Monday to Friday
-      const d = new Date(currentMonday);
-      d.setDate(currentMonday.getDate() + i);
-      dates.push(toLocalYYYYMMDD(d));
+  while (current <= last) {
+    const day = current.getDay();
+    if (day !== 0 && day !== 6) { // Lunes a Viernes
+      dates.push(toLocalYYYYMMDD(new Date(current)));
     }
-    currentMonday.setDate(currentMonday.getDate() + 7);
+    current.setDate(current.getDate() + 1);
   }
   return dates;
 };
@@ -118,8 +117,8 @@ const getDatesFromWeekRange = (startW: string, endW: string) => {
 export default function ConfigView2() {
   const [startDate, setStartDate] = useState(toLocalYYYYMMDD(new Date()));
   const [endDate, setEndDate] = useState(toLocalYYYYMMDD(new Date()));
-  const [startWeek, setStartWeek] = useState(getISOWeekString(new Date()));
-  const [endWeek, setEndWeek] = useState(getISOWeekString(new Date()));
+  const [startWeek, setStartWeek] = useState(toLocalYYYYMMDD(new Date()));
+  const [endWeek, setEndWeek] = useState(toLocalYYYYMMDD(new Date()));
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('17:00');
   const [isSaving, setIsSaving] = useState(false);
@@ -231,7 +230,7 @@ export default function ConfigView2() {
   const fetchDailyTasks = () => {
     if (!selectedPlanningDate) return;
     const userId = Number(localStorage.getItem('atenea_user_id') || 1);
-    fetch(`/api/tareas?userId=${userId}&fecha=${selectedPlanningDate}`)
+    fetch(`/api/tareas?userId=${userId}&fecha=${selectedPlanningDate}&_t=${Date.now()}`)
       .then(res => res.json())
       .then(data => {
          if (Array.isArray(data)) setDayTasks(data);
@@ -281,7 +280,7 @@ export default function ConfigView2() {
   const fetchAllTasks = async () => {
     try {
       const userId = Number(localStorage.getItem('atenea_user_id') || 1);
-      const res = await fetch(`/api/tareas/todas?userId=${userId}`);
+      const res = await fetch(`/api/tareas/todas?userId=${userId}&_t=${Date.now()}`);
       const data = await res.json();
       setAllTasks(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -330,7 +329,7 @@ export default function ConfigView2() {
   })();
 
   const fetchBloques = () => fetch('/api/bloques').then(res => res.json()).then(data => setBloques(Array.isArray(data) ? data : [])).catch(() => setBloques([]));
-  const fetchBacklog = () => fetch('/api/backlog').then(res => res.json()).then(data => setBacklog(Array.isArray(data) ? data : [])).catch(() => setBacklog([]));
+  const fetchBacklog = () => fetch(`/api/backlog?_t=${Date.now()}`).then(res => res.json()).then(data => setBacklog(Array.isArray(data) ? data : [])).catch(() => setBacklog([]));
 
   const handleDragStart = (e: React.DragEvent, taskId: number) => {
     e.dataTransfer.setData('taskId', taskId.toString());
@@ -432,7 +431,7 @@ export default function ConfigView2() {
           fecha: dateStr,
           actividad: task.actividad,
           prioridad: task.prioridad,
-          estado_ejecucion: 'nuevo',
+          estado_ejecucion: 'abierto',
           tiempo_asignado_minutos: task.tiempo_estimado || 0,
           backlog_id: task.id,
           area: task.area,
@@ -854,7 +853,7 @@ export default function ConfigView2() {
           backlog_id: task.id,
           area: task.area,
           complejidad: task.complejidad || 2,
-          estado_ejecucion: 'nuevo'
+          estado_ejecucion: 'abierto'
         }),
       });
 
@@ -928,7 +927,9 @@ export default function ConfigView2() {
     const weights: Record<number, number> = { 10: 2, 7: 1.5, 4: 1, 2: 0.5 };
     let usedHours = 0;
     tasks.forEach(t => {
-      const baseHours = weights[t.prioridad] || 1;
+      const baseHours = (t.tiempo_asignado_minutos !== undefined && t.tiempo_asignado_minutos !== null && t.tiempo_asignado_minutos > 0)
+        ? (t.tiempo_asignado_minutos / 60)
+        : (weights[t.prioridad] || 1);
       const status = (t.estado_ejecucion || t.execution_status || 'nuevo').toLowerCase();
       
       if (status === 'nuevo' || status === 'abierto' || status === 'progreso' || status === 'en_curso') {
@@ -1255,7 +1256,7 @@ export default function ConfigView2() {
               <div className="p-6 space-y-6">
                 <div className="flex bg-slate-100 p-1.5 rounded-xl gap-1 mb-4">
                   <button onClick={() => setIsJornadaRecurrente(false)} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!isJornadaRecurrente ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>
-                    {modalSource === 'card' ? 'Día Único' : 'Por Semana'}
+                    {modalSource === 'card' ? 'Día Único' : 'Por Rango'}
                   </button>
                   <button onClick={() => setIsJornadaRecurrente(true)} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${isJornadaRecurrente ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Recurrente</button>
                 </div>
@@ -1269,12 +1270,12 @@ export default function ConfigView2() {
                   ) : (
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Semana Desde</label>
-                        <input type="week" value={startWeek} onChange={e => setStartWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha Inicio</label>
+                        <input type="date" value={startWeek} onChange={e => setStartWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Semana Hasta</label>
-                        <input type="week" value={endWeek} onChange={e => setEndWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha Fin</label>
+                        <input type="date" value={endWeek} onChange={e => setEndWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
                       </div>
                     </div>
                   )
@@ -1331,7 +1332,7 @@ export default function ConfigView2() {
               <div className="p-6 space-y-6">
                 <div className="flex bg-slate-100 p-1.5 rounded-xl gap-1">
                   <button onClick={() => { setIsExcepcionGroupMode(false); setNewBlock({...newBlock, isRecurrente: false}); }} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!isExcepcionGroupMode ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>
-                    {modalSource === 'card' ? 'Día Único' : 'Por Semana'}
+                    {modalSource === 'card' ? 'Día Único' : 'Por Rango'}
                   </button>
                   <button onClick={() => { setIsExcepcionGroupMode(true); setNewBlock({...newBlock, isRecurrente: true}); }} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${isExcepcionGroupMode ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-primary'}`}>Recurrente</button>
                 </div>
@@ -1354,12 +1355,12 @@ export default function ConfigView2() {
                     ) : (
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Semana Desde</label>
-                          <input type="week" value={startWeek} onChange={e => setStartWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha Inicio</label>
+                          <input type="date" value={startWeek} onChange={e => setStartWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Semana Hasta</label>
-                          <input type="week" value={endWeek} onChange={e => setEndWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha Fin</label>
+                          <input type="date" value={endWeek} onChange={e => setEndWeek(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-bold text-slate-700 outline-none focus:border-primary" />
                         </div>
                       </div>
                     )
@@ -1986,18 +1987,7 @@ export default function ConfigView2() {
                         <span className="text-[11px] font-black text-slate-800">{endTime}</span>
                       </div>
                       
-                      <div className="bg-primary/5 border border-primary/10 rounded-2xl p-5 flex flex-col items-center text-center mt-2 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-2 opacity-5">
-                          <Clock size={40} className="text-primary" />
-                        </div>
-                        <span className="text-[10px] font-black text-primary uppercase tracking-widest mb-1 relative z-10">Jornada Efectiva</span>
-                        <span className="text-2xl font-black text-primary relative z-10">
-                          {availableHours > 0 ? Math.max(0, Math.round((remainingHours / availableHours) * 100)) : 0}% Disponible
-                        </span>
-                        <span className="text-[9px] font-bold text-primary/70 relative z-10 mt-1 uppercase tracking-wider">
-                          {remainingHours.toFixed(1)}h Libres / {availableHours.toFixed(1)}h Totales
-                        </span>
-                      </div>
+
 
                       {/* Mostrar Excepciones del día */}
                       {(() => {
@@ -2030,63 +2020,78 @@ export default function ConfigView2() {
                     </div>
                   </div>
 
-                  {/* Calculo de Capacidad Visual */}
-                  <div className="p-6 flex-1 flex flex-col gap-6 bg-white">
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Carga del Día</span>
-                        <span className={`text-[10px] font-black uppercase ${remainingHours < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                          {remainingHours < 0 ? 'Sobrecargado' : 'Capacidad Óptima'}
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden flex shadow-inner">
-                        <div 
-                          className={`h-full transition-all duration-500 ${remainingHours < 0 ? 'bg-red-500' : 'bg-emerald-500'}`}
-                          style={{ width: `${Math.min((usedHours / availableHours) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                    
-                    {remainingHours < 0 ? (
-                      <div className="mt-2 bg-orange-50 rounded-2xl p-5 border border-orange-200">
-                        <h5 className="text-[10px] font-black text-orange-700 uppercase tracking-widest mb-3 flex items-center gap-2">
-                          <AlertTriangle size={14} /> Capacidad Alcanzada
-                        </h5>
-                        <p className="text-[9px] font-bold text-orange-600/90 leading-relaxed">
-                          La planificación actual supera el tiempo disponible.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="mt-2 bg-emerald-50 rounded-2xl p-5 border border-emerald-100">
-                        <h5 className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-3 flex items-center gap-2">
-                          <ListChecks size={14} /> Planificación Válida
-                        </h5>
-                        <p className="text-[9px] font-bold text-emerald-600/90 leading-relaxed">
-                          Las actividades seleccionadas encajan perfectamente en tu jornada.
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="mt-auto pt-6 border-t border-slate-100">
-                      {dailyPlans[selectedPlanningDate]?.estado_cierre === 1 ? (
-                        <div className="w-full py-4 bg-slate-100 text-slate-400 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 cursor-not-allowed">
-                          <CheckCircle size={16} />
-                          Turno Cerrado
+                  {/* Tanque de Energía Visual (Horizontal like Agenda Pro) */}
+                  <div className="p-6 flex-1 flex flex-col justify-center bg-white border-t border-slate-50">
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 flex flex-col justify-between gap-6 shadow-sm">
+                      <div className="flex flex-col gap-6 w-full">
+                        <div className="flex flex-col items-center text-center">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tanque de Energía</span>
+                          <div className="flex items-baseline gap-1 mt-1">
+                            <span className={`text-3xl font-black ${availableHours > 0 && usedHours / availableHours < 0.85 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                              {Math.max(0, Math.round(100 - (availableHours > 0 ? (usedHours / availableHours) * 100 : 0)))}%
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-400 uppercase">libre</span>
+                          </div>
                         </div>
-                      ) : (
-                        <>
-                          <button 
-                            onClick={handleCloseDay}
-                            className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-slate-900/20 flex items-center justify-center gap-2 group"
-                          >
-                            <CheckCircle size={16} className="group-hover:scale-110 transition-transform" />
-                            Cerrar Turno Diario
-                          </button>
-                          <p className="text-[8px] font-bold text-slate-400 text-center mt-3 uppercase tracking-wider">
-                            Las tareas no terminadas regresarán al backlog
-                          </p>
-                        </>
-                      )}
+                        
+                        <div className="w-full h-px bg-slate-100" />
+                        
+                        <div className="flex-1 w-full flex flex-col justify-center">
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                Carga Diaria
+                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {availableHours > 0 && usedHours / availableHours > 1 ? (
+                                  <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1">
+                                    <AlertTriangle size={12}/> Sobrecarga
+                                  </span>
+                                ) : availableHours > 0 && usedHours / availableHours < 0.85 ? (
+                                  <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-1">
+                                    <Zap size={12}/> Energía de Sobra
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1">
+                                    <CheckCircle size={12}/> Óptimo
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right flex flex-col justify-end">
+                              <span className="text-xl font-black text-slate-700 leading-none">
+                                {Math.round(availableHours > 0 ? (usedHours / availableHours) * 100 : 0)}%
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${Math.min(100, (availableHours > 0 ? (usedHours / availableHours) * 100 : 0))}%` }}
+                              className={`h-full rounded-full transition-all duration-1000 ${
+                                availableHours > 0 && usedHours / availableHours > 1 ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.4)]' : 
+                                availableHours > 0 && usedHours / availableHours < 0.85 ? 'bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.4)]' : 
+                                'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                              }`}
+                            />
+                          </div>
+            
+                          <div className="mt-1.5 flex justify-end">
+                            <span className={`text-[8px] font-bold uppercase tracking-wider ${
+                              availableHours > 0 && usedHours / availableHours > 1 ? 'text-amber-500' : 
+                              availableHours > 0 && usedHours / availableHours < 0.85 ? 'text-blue-500' : 
+                              'text-emerald-400'
+                            }`}>
+                              {availableHours > 0 && usedHours / availableHours > 1 
+                                ? '¡Ánimo, un paso a la vez! Tú puedes 💪' 
+                                : availableHours > 0 && usedHours / availableHours < 0.85 
+                                ? '¡Aún tienes energía! ¿Te animas a tomar otra tarea? 😎' 
+                                : '¡Carga óptima! Estás en tu mejor momento ⚡'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2157,8 +2162,8 @@ export default function ConfigView2() {
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">2. Jornada Laboral Base</span>
             <button 
               onClick={() => { 
-                setStartWeek(getISOWeekString(weekDates[0])); 
-                setEndWeek(getISOWeekString(weekDates[0])); 
+                setStartWeek(toLocalYYYYMMDD(weekDates[0] || new Date())); 
+                setEndWeek(toLocalYYYYMMDD(weekDates[0] || new Date())); 
                 setModalSource('header'); 
                 setIsJornadaRecurrente(false); 
                 setIsJornadaModalOpen(true); 
@@ -2180,8 +2185,8 @@ export default function ConfigView2() {
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">3. Bloques Especiales</span>
             <button 
               onClick={() => {
-                setStartWeek(getISOWeekString(weekDates[0])); 
-                setEndWeek(getISOWeekString(weekDates[0])); 
+                setStartWeek(toLocalYYYYMMDD(weekDates[0] || new Date())); 
+                setEndWeek(toLocalYYYYMMDD(weekDates[0] || new Date())); 
                 setModalSource('header');
                 setIsExcepcionGroupMode(false);
                 setNewBlock({...newBlock, isRecurrente: false});

@@ -308,13 +308,26 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
       // Despriorizado y Fallido consumen 0 horas
     });
 
-    const availableHours = plan?.horas_efectivas || 8.0;
+    const safeStart = plan?.hora_inicio || '08:00';
+    const safeEnd = plan?.hora_fin || '17:00';
+    const [startH, startM] = safeStart.split(':').map(Number);
+    const [endH, endM] = safeEnd.split(':').map(Number);
+    let availableHours = (endH + (endM || 0) / 60) - (startH + (startM || 0) / 60);
+
+    bloques.forEach(b => {
+      const [bh1, bm1] = b.hora_inicio.split(':').map(Number);
+      const [bh2, bm2] = b.hora_fin.split(':').map(Number);
+      const duration = (bh2 + (bm2 || 0) / 60) - (bh1 + (bm1 || 0) / 60);
+      availableHours -= duration;
+    });
+
+    if (isNaN(availableHours) || availableHours < 0) availableHours = 8.0;
 
     return { 
       usedHours, 
       availableHours, 
-      remainingHours: Math.max(0, availableHours - usedHours),
-      percentage: Math.min(100, (usedHours / availableHours) * 100)
+      remainingHours: availableHours - usedHours,
+      percentage: availableHours > 0 ? (usedHours / availableHours) * 100 : 0
     };
   };
 
@@ -535,7 +548,8 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
 
       if (!closureRes.ok) throw new Error('Error al cerrar el plan diario');
 
-      if (onNavigate) onNavigate('dashboard2');
+      await fetchData();
+      alert('¡Turno finalizado con éxito! Puedes seleccionar el siguiente día en el calendario superior.');
     } catch (error) {
       console.error('Error al finalizar el día:', error);
       setErrorCierre(error instanceof Error ? error.message : 'Hubo un error al guardar los datos. Por favor, inténtalo de nuevo.');
@@ -851,15 +865,15 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
 
               <div className="mt-1.5 flex justify-end">
                 <span className={`text-[8px] font-bold uppercase tracking-wider ${
-                  timeInfo.percentage > 100 ? 'text-rose-400' : 
-                  timeInfo.percentage < 85 ? 'text-blue-500' : 
-                  'text-emerald-400'
+                  timeInfo.percentage > 100 ? 'text-rose-500' : 'text-primary'
                 }`}>
-                  {timeInfo.percentage > 100 
-                    ? '⚠️ REDUCE CARGA O AÑADE HORAS' 
+                  {tasks.length === 0 
+                    ? 'DÍA INACTIVO. NINGUNA ACTIVIDAD PLANIFICADA 🌴'
+                    : timeInfo.percentage > 100 
+                    ? '¡Ánimo, un paso a la vez! Tú puedes 💪' 
                     : timeInfo.percentage < 85 
-                    ? '¡TIEMPO LIBRE! JALA UNA TAREA 😎' 
-                    : 'CALZA PERFECTO CON TU TURNO'}
+                    ? '¡Aún tienes energía! ¿Te animas a tomar otra tarea? 🚀' 
+                    : '¡Carga óptima! Estás en tu mejor momento 🎯'}
                 </span>
               </div>
             </div>
@@ -874,18 +888,24 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
                   Rompe Agenda
                 </button>
               )}
-              <button 
-                onClick={isClosed ? handleReopenDay : handleFinishDay}
-                disabled={isClosing}
-                className={`flex items-center gap-2 px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg hover:scale-105 active:scale-95 ${
-                  isClosed 
-                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20' 
-                    : 'bg-slate-900 hover:bg-black text-white'
-                }`}
-              >
-                {isClosing ? <Loader2 className="animate-spin" size={18} /> : (isClosed ? <RefreshCw size={14} /> : <Save size={18} />)}
-                {isClosed ? 'Reabrir Turno' : 'Finalizar Turno'}
-              </button>
+              {tasks.length === 0 ? (
+                <div className="flex items-center gap-2 px-6 py-3.5 bg-slate-100 border border-slate-200 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest cursor-default">
+                  Día Inactivo
+                </div>
+              ) : (
+                <button 
+                  onClick={isClosed ? handleReopenDay : handleFinishDay}
+                  disabled={isClosing}
+                  className={`flex items-center gap-2 px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg hover:scale-105 active:scale-95 ${
+                    isClosed 
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20' 
+                      : 'bg-slate-900 hover:bg-black text-white'
+                  }`}
+                >
+                  {isClosing ? <Loader2 className="animate-spin" size={18} /> : (isClosed ? <RefreshCw size={14} /> : <Save size={18} />)}
+                  {isClosed ? 'Turno Cerrado (Reabrir)' : 'Turno Sin Cerrar (Finalizar)'}
+                </button>
+              )}
             </div>
           </div>
 

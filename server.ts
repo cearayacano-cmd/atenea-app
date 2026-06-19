@@ -625,9 +625,12 @@ async function startServer() {
     if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
     
     db.transaction(() => {
-      const tasksWithBacklog = db.prepare("SELECT backlog_id FROM Tareas WHERE fecha = ? AND backlog_id IS NOT NULL").all(fecha);
-      for (const t of tasksWithBacklog) {
-        db.prepare("UPDATE Backlog SET status = 'pendiente' WHERE id = ?").run(t.backlog_id);
+      const tasks = db.prepare("SELECT id, backlog_id FROM Tareas WHERE fecha = ?").all(fecha) as any[];
+      for (const t of tasks) {
+        if (t.backlog_id) {
+          db.prepare("UPDATE Backlog SET status = 'pendiente' WHERE id = ?").run(t.backlog_id);
+        }
+        db.prepare("DELETE FROM LogsTareas WHERE tarea_id = ?").run(t.id);
       }
       db.prepare("DELETE FROM Tareas WHERE fecha = ?").run(fecha);
     })();
@@ -672,6 +675,7 @@ async function startServer() {
       if (task && task.backlog_id) {
         db.prepare("UPDATE Backlog SET status = 'pendiente' WHERE id = ?").run(task.backlog_id);
       }
+      db.prepare("DELETE FROM LogsTareas WHERE tarea_id = ?").run(id);
       db.prepare("DELETE FROM Tareas WHERE id = ?").run(id);
     })();
     res.json({ success: true });
@@ -716,6 +720,15 @@ async function startServer() {
         
         if (estado === 'resuelto' || estado === 'terminada') {
           db.prepare("UPDATE Backlog SET status = 'resuelto' WHERE id = ?").run(task.backlog_id);
+        } else if (estado === 'en espera' || estado === 'espera') {
+          db.prepare("UPDATE Tareas SET updated_at = ? WHERE id = ?").run(nowStr, task.id);
+          db.prepare("UPDATE Backlog SET status = 'en espera' WHERE id = ?").run(task.backlog_id);
+        } else if (estado === 'despriorizada' || estado === 'despriorizado') {
+          db.prepare("UPDATE Tareas SET updated_at = ? WHERE id = ?").run(nowStr, task.id);
+          db.prepare("UPDATE Backlog SET status = 'despriorizado' WHERE id = ?").run(task.backlog_id);
+        } else if (estado === 'fallo' || estado === 'fallido') {
+          db.prepare("UPDATE Tareas SET updated_at = ? WHERE id = ?").run(nowStr, task.id);
+          db.prepare("UPDATE Backlog SET status = 'fallo' WHERE id = ?").run(task.backlog_id);
         } else {
           // Reasignamos al backlog y marcamos como rezagado
           db.prepare("UPDATE Tareas SET estado_ejecucion = 'rezagado', updated_at = ? WHERE id = ?").run(nowStr, task.id);
