@@ -559,13 +559,9 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
   };
 
   const handleReopenDay = async () => {
-    const justification = window.prompt("Por favor, escribe una justificación para reabrir este turno (Requerido):");
-    if (justification === null) {
-      return; // Cancelled
-    }
-    if (!justification.trim()) {
-      alert("La justificación es requerida para reabrir el turno.");
-      return;
+    let justification = window.prompt("Por favor, escribe una justificación para reabrir este turno (Requerido):");
+    if (justification === null || !justification.trim()) {
+      justification = "Reapertura solicitada por el usuario";
     }
 
     setIsClosing(true);
@@ -1188,9 +1184,15 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
       {editingTask && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[60] flex items-center justify-center p-4">
           <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100">
-            <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
-              <div className="space-y-1">
-                <div className="flex items-center gap-3">
+            <div className="p-8 pb-4 border-b border-slate-100 flex justify-between items-start bg-slate-50/50">
+              <div className="space-y-3 flex-1">
+                {isClosed && (
+                  <div className="mb-4 bg-rose-50 text-rose-600 p-3 rounded-xl border border-rose-100 flex items-center gap-2">
+                    <Lock size={16} />
+                    <span className="text-xs font-black uppercase tracking-wider">El turno está cerrado. Reábrelo para editar.</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mb-2">
                   <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase ${getPriorityColor(editingTask.prioridad).badge}`}>{getPriorityColor(editingTask.prioridad).label}</span>
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{editingTask.area || 'GENERAL'}</span>
                 </div>
