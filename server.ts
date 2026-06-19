@@ -307,7 +307,7 @@ async function startServer() {
   });
 
   app.get("/api/me", (req, res) => {
-    const uid = parseInt(req.query.userId as string) || 1;
+    const uid = parseInt(req.query.userId as string) || getDefaultUserId();
     const user = db.prepare("SELECT * FROM Usuarios WHERE id = ?").get(uid);
     if (user) {
       return res.json({
@@ -415,7 +415,7 @@ async function startServer() {
   app.get("/api/tareas", (req, res) => {
     const { fecha, userId } = req.query;
     if (!fecha) return res.status(400).json({ error: "Fecha requerida" });
-    const uid = parseInt(userId as string) || 1;
+    const uid = parseInt(userId as string) || getDefaultUserId();
 
     const tasks = db.prepare(`
       SELECT T.*, B.is_collaborative 
@@ -453,7 +453,7 @@ async function startServer() {
   app.post("/api/tareas", (req, res) => {
     const { fecha, actividad, prioridad, tiempo_asignado_minutos, fecha_origen_remanente, backlog_id, estado_ejecucion, evidencia, area, assignedUsers, userId, complejidad } = req.body;
     
-    const uid = parseInt(userId as string) || 1;
+    const uid = parseInt(userId as string) || getDefaultUserId();
     const todayStr = new Date().toLocaleDateString('sv-SE');
 
     // Block if assigning to today or future, and there is an unclosed past workday
@@ -755,7 +755,7 @@ async function startServer() {
   // 3. Incidencias
   app.get("/api/incidencias", (req, res) => {
     const { fecha, fechaInicio, fechaFin } = req.query;
-    const userId = parseInt(req.query.userId as string) || 1;
+    const userId = parseInt(req.query.userId as string) || getDefaultUserId();
     if (fechaInicio && fechaFin) {
       const incidents = db.prepare("SELECT * FROM Incidencias WHERE fecha >= ? AND fecha <= ? AND user_id = ?").all(fechaInicio, fechaFin, userId);
       return res.json(incidents);
@@ -767,7 +767,7 @@ async function startServer() {
 
   app.post("/api/incidencias", (req, res) => {
     const { fecha, descripcion, hora_inicio, hora_fin, tipo, userId } = req.body;
-    const uid = parseInt(userId as string) || 1;
+    const uid = parseInt(userId as string) || getDefaultUserId();
     db.prepare("INSERT INTO Incidencias (fecha, descripcion, hora_inicio, hora_fin, tipo, user_id) VALUES (?, ?, ?, ?, ?, ?)")
       .run(fecha, descripcion, hora_inicio, hora_fin, tipo, uid);
     db.prepare("INSERT INTO BloquesNoDisponibles (fecha, hora_inicio, hora_fin, tipo, dia_semana, descripcion, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
@@ -789,7 +789,7 @@ async function startServer() {
   // 4. Bloques No Disponibles
   app.get("/api/bloques", (req, res) => {
     const { fecha } = req.query;
-    const userId = parseInt(req.query.userId as string) || 1;
+    const userId = parseInt(req.query.userId as string) || getDefaultUserId();
     if (fecha) {
       const blocks = db.prepare("SELECT * FROM BloquesNoDisponibles WHERE (fecha = ? OR dia_semana IS NOT NULL) AND user_id = ?").all(fecha, userId);
       res.json(blocks);
@@ -801,7 +801,7 @@ async function startServer() {
 
   app.post("/api/bloques", (req, res) => {
     const { fecha, hora_inicio, hora_fin, tipo, dia_semana, descripcion, userId } = req.body;
-    const uid = parseInt(userId as string) || 1;
+    const uid = parseInt(userId as string) || getDefaultUserId();
     db.prepare("INSERT INTO BloquesNoDisponibles (fecha, hora_inicio, hora_fin, tipo, dia_semana, descripcion, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(fecha || null, hora_inicio, hora_fin, tipo, dia_semana || null, descripcion || null, uid);
     res.json({ success: true });
@@ -823,7 +823,7 @@ async function startServer() {
 
   // 5. Backlog
   app.get("/api/backlog", (req, res) => {
-    const uid = parseInt(req.query.userId as string) || 1;
+    const uid = parseInt(req.query.userId as string) || getDefaultUserId();
     
     // Self-healing: Reset status to 'nuevo' for tasks that are 'progreso' but have no scheduled daily tasks
     db.prepare(`
@@ -869,7 +869,7 @@ async function startServer() {
 
   app.get("/api/backlog/recommend", (req, res) => {
     const { lastArea } = req.query;
-    const uid = parseInt(req.query.userId as string) || 1;
+    const uid = parseInt(req.query.userId as string) || getDefaultUserId();
     
     // Fetch all pending backlog items visible to the user
     const items = db.prepare(`
@@ -936,7 +936,7 @@ async function startServer() {
 
   app.post("/api/backlog", (req, res) => {
     const { actividad, prioridad, status, area, is_collaborative, assignedUsers, userId, complejidad, tiempo_estimado, rol_ejecutante } = req.body;
-    const uid = userId || 1;
+    const uid = userId || getDefaultUserId();
     const isCollab = is_collaborative ? 1 : 0;
     
     const result = db.prepare("INSERT INTO Backlog (actividad, prioridad, status, area, is_collaborative, owner_id, complejidad, tiempo_estimado, rol_ejecutante) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -978,7 +978,7 @@ async function startServer() {
     if (is_collaborative !== undefined || assignedUsers !== undefined) {
       const task = db.prepare("SELECT is_collaborative, owner_id FROM Backlog WHERE id = ?").get(id) as any;
       const isCollab = is_collaborative !== undefined ? (is_collaborative ? 1 : 0) : (task?.is_collaborative || 0);
-      const ownerId = task?.owner_id || userId || 1;
+      const ownerId = task?.owner_id || userId || getDefaultUserId();
 
       if (isCollab === 1) {
         let usersToAssign = [];
@@ -991,7 +991,7 @@ async function startServer() {
         
         db.prepare("DELETE FROM BacklogAsignaciones WHERE backlog_id = ?").run(id);
         const stmt = db.prepare("INSERT INTO BacklogAsignaciones (backlog_id, user_id) VALUES (?, ?)");
-        const allUsers = Array.from(new Set([ownerId, ...usersToAssign]));
+        const allUsers = Array.from(new Set([ownerId, ...usersToAssign])).map(u => parseInt(u as string)).filter(u => !isNaN(u));
         allUsers.forEach(u => stmt.run(id, u));
       } else {
         db.prepare("DELETE FROM BacklogAsignaciones WHERE backlog_id = ?").run(id);
