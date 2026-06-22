@@ -904,6 +904,13 @@ export default function AgendaView2({ onNavigate, selectedDate, setSelectedDate 
               )}
             </div>
           </div>
+          
+          {errorCierre && (
+            <div className="mt-4 p-4 bg-rose-50 border border-rose-200 text-rose-600 rounded-2xl flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-top-2">
+              <AlertTriangle size={20} className="shrink-0 mt-0.5" />
+              <p className="text-xs font-bold leading-relaxed">{errorCierre}</p>
+            </div>
+          )}
 
           {/* Layout principal: Grid de tareas + Sidebar derecha */}
           <div className="flex gap-6 items-start">
