@@ -299,7 +299,8 @@ export default function ConfigView2() {
             hora_inicio: d.hora_inicio, 
             hora_fin: d.hora_fin, 
             estado_cierre: d.estado_cierre,
-            user_id: d.user_id 
+            user_id: d.user_id,
+            task_count: d.task_count || 0
           };
         });
       }
@@ -338,7 +339,7 @@ export default function ConfigView2() {
   // Detectar bloqueo por jornadas pasadas sin finalizar
   const getPastUnclosedDay = (targetDate: string) => {
     const dates = Object.keys(dailyPlans).sort();
-    return dates.find(dStr => dStr < targetDate && dailyPlans[dStr]?.estado_cierre === 0);
+    return dates.find(dStr => dStr < targetDate && dailyPlans[dStr]?.estado_cierre === 0 && dailyPlans[dStr]?.task_count > 0);
   };
   const hasPastUnclosedDay = (targetDate: string) => !!getPastUnclosedDay(targetDate);
 

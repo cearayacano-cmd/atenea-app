@@ -1026,7 +1026,10 @@ async function startServer() {
 
 
   app.get("/api/planes-diarios", (req, res) => {
-    const plans = db.prepare("SELECT * FROM PlanesDiarios").all();
+    const plans = db.prepare(`
+      SELECT P.*, (SELECT COUNT(*) FROM Tareas T WHERE T.fecha = P.date AND T.user_id = P.user_id) as task_count
+      FROM PlanesDiarios P
+    `).all();
     res.json(plans);
   });
 
