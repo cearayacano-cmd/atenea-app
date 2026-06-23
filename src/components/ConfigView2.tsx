@@ -290,7 +290,8 @@ export default function ConfigView2() {
 
   const fetchDailyPlans = async () => {
     try {
-      const res = await fetch('/api/planes-diarios');
+      const userId = Number(localStorage.getItem('atenea_user_id') || 1);
+      const res = await fetch(`/api/planes-diarios?userId=${userId}`);
       const data = await res.json();
       const plans: Record<string, any> = {};
       if (Array.isArray(data)) {
@@ -336,10 +337,15 @@ export default function ConfigView2() {
     e.dataTransfer.setData('taskId', taskId.toString());
   };
 
-  // Detectar bloqueo por jornadas pasadas sin finalizar
+  // Detectar advertencia por jornadas pasadas sin finalizar (ignorando las más viejas a 3 días)
   const getPastUnclosedDay = (targetDate: string) => {
     const dates = Object.keys(dailyPlans).sort();
-    return dates.find(dStr => dStr < targetDate && dailyPlans[dStr]?.estado_cierre === 0 && dailyPlans[dStr]?.task_count > 0);
+    
+    const limitDateObj = new Date(targetDate + 'T00:00:00');
+    limitDateObj.setDate(limitDateObj.getDate() - 4); // Ignoramos si es más viejo que 4 días
+    const limitDateStr = limitDateObj.toISOString().split('T')[0];
+
+    return dates.find(dStr => dStr < targetDate && dStr >= limitDateStr && dailyPlans[dStr]?.estado_cierre === 0 && dailyPlans[dStr]?.task_count > 0);
   };
   const hasPastUnclosedDay = (targetDate: string) => !!getPastUnclosedDay(targetDate);
 
@@ -401,8 +407,7 @@ export default function ConfigView2() {
 
     const unclosedDay = getPastUnclosedDay(dateStr);
     if (unclosedDay) {
-      alert(`🔒 Bloqueo de Planificación: El día ${unclosedDay} está sin cerrar. Por favor finaliza el turno de ese día pendiente en su Agenda Pro antes de planificar nuevas jornadas.`);
-      return;
+      console.warn(`⚠️ ADVERTENCIA: El día ${unclosedDay} está sin cerrar.`);
     }
 
     const isValid = await validateCriticalTasksForDay(task, dateStr);
@@ -1035,7 +1040,7 @@ export default function ConfigView2() {
   };
 
   const unclosedPastDay = selectedPlanningDate ? getPastUnclosedDay(selectedPlanningDate) : null;
-  const isPlanningBlocked = !!unclosedPastDay;
+  const isPlanningBlocked = false; // Se elimina el bloqueo estricto en el frontend
 
   return (
     <div className="w-full px-2 py-2 space-y-8 bg-[#F8FAFC]">
@@ -1715,18 +1720,18 @@ export default function ConfigView2() {
               </div>
 
               <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-                {/* Banner de Bloqueo por Jornadas Pasadas Abiertas */}
-                {isPlanningBlocked && (
-                  <div className="bg-red-500 text-white px-6 py-4 flex items-center gap-3 animate-pulse shadow-md z-20">
+                {/* Banner de Advertencia por Jornadas Pasadas Abiertas */}
+                {unclosedPastDay && (
+                  <div className="bg-amber-500 text-white px-6 py-4 flex items-center gap-3 animate-pulse shadow-md z-20">
                     <AlertTriangle size={20} className="shrink-0" />
                     <span className="text-xs font-black uppercase tracking-wide leading-relaxed">
-                      🔒 Planificación Bloqueada: El día {unclosedPastDay} está sin finalizar. Debes ingresar a la agenda correspondiente en el menú lateral y presionar "Finalizar Turno" antes de planificar nuevas actividades.
+                      ⚠️ Advertencia: El día {unclosedPastDay} está sin finalizar. Se recomienda finalizar el turno de ese día en la Agenda Pro para mantener tus métricas.
                     </span>
                   </div>
                 )}
 
-                {/* Sugerencia de Inicio (Oculta si está bloqueado) */}
-                {!isPlanningBlocked && pendingSuggestions.length > 0 && (
+                {/* Sugerencia de Inicio */}
+                {pendingSuggestions.length > 0 && (
                   <motion.div 
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}

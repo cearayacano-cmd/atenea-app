@@ -12,6 +12,9 @@ const __dirname = path.dirname(__filename);
 
 const db = new Database("database.db");
 
+// Helper para obtener el usuario por defecto cuando no viene en el request
+const getDefaultUserId = () => 1;
+
 // Initialize database with requested schema
 db.exec(`
   CREATE TABLE IF NOT EXISTS Configuracion (
@@ -457,6 +460,8 @@ async function startServer() {
     const todayStr = new Date().toLocaleDateString('sv-SE');
 
     // Block if assigning to today or future, and there is an unclosed past workday
+    // MODIFICADO: Se elimina el bloqueo estricto por días anteriores pendientes de cierre
+    /*
     if (fecha >= todayStr) {
       const unclosedPastDay = db.prepare(`
         SELECT DISTINCT T.fecha 
@@ -475,6 +480,7 @@ async function startServer() {
         });
       }
     }
+    */
     
     let usersToAssign = (assignedUsers && assignedUsers.length > 0) ? assignedUsers : [uid];
     
@@ -1026,15 +1032,18 @@ async function startServer() {
 
 
   app.get("/api/planes-diarios", (req, res) => {
+    const uid = parseInt(req.query.userId as string) || getDefaultUserId();
     const plans = db.prepare(`
       SELECT P.*, (SELECT COUNT(*) FROM Tareas T WHERE T.fecha = P.date AND T.user_id = P.user_id) as task_count
       FROM PlanesDiarios P
-    `).all();
+      WHERE P.user_id = ?
+    `).all(uid);
     res.json(plans);
   });
 
   app.get("/api/tareas/todas", (req, res) => {
-    const tasks = db.prepare("SELECT * FROM Tareas ORDER BY fecha DESC, prioridad DESC").all();
+    const uid = parseInt(req.query.userId as string) || getDefaultUserId();
+    const tasks = db.prepare("SELECT * FROM Tareas WHERE user_id = ? ORDER BY fecha DESC, prioridad DESC").all(uid);
     res.json(tasks);
   });
 
